@@ -66,11 +66,7 @@ body {
   transition: opacity .4s ease, transform .4s ease;
   z-index: 999;
 }
-
-#winOverlay.show {
-  opacity: 1;
-  transform: scale(1);
-}
+#winOverlay.show { opacity:1; transform:scale(1); }
 </style>
 </head>
 
@@ -84,298 +80,251 @@ body {
 <div id="winOverlay">🎉 Puzzle Tamamlandı!</div>
 
 <script>
-/* ===== SERVICE WORKER ===== */
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js");
-}
-
-/* ===== AYAR ===== */
+/* ===================== AYAR ===================== */
 const ROWS = 3;
 const COLS = 5;
 const BUFFER = 1;
 const SNAP_THRESHOLD = 0.35;
 
-/* ===== DOM ===== */
+/* ===================== DOM ===================== */
 const board = document.getElementById("board");
 const input = document.getElementById("imageInput");
 
-/* ===== STATE ===== */
-let BOARD_WIDTH, BOARD_HEIGHT, PW, PH;
+/* ===================== STATE ===================== */
+let PW, PH;
 let pieces = [];
 let groups = {};
-let nextGroupId = 0;
-
+let grid = [];
 let dragGroup = null;
 let offsetX = 0;
 let offsetY = 0;
 let activePointerId = null;
 let finished = false;
 
-/* ===== FOTOĞRAF ===== */
+/* ===================== FOTO ===================== */
 input.onchange = () => {
-  const file = input.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = e => buildPuzzle(e.target.result);
-  reader.readAsDataURL(file);
+  const f = input.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = e => buildPuzzle(e.target.result);
+  r.readAsDataURL(f);
 };
 
 function buildPuzzle(src) {
   const img = new Image();
-  img.onload = () => setupBoard(img, src);
+  img.onload = () => setup(img, src);
   img.src = src;
 }
 
-/* ===== BOARD ===== */
-function setupBoard(img, src) {
+/* ===================== SETUP ===================== */
+function setup(img, src) {
   board.innerHTML = "";
   pieces = [];
   groups = {};
-  nextGroupId = 0;
   finished = false;
 
-  BOARD_WIDTH = Math.floor(document.documentElement.clientWidth * 0.95);
-  BOARD_HEIGHT = BOARD_WIDTH * (img.naturalHeight / img.naturalWidth);
+  const W = Math.floor(innerWidth * 0.95);
+  const H = W * (img.naturalHeight / img.naturalWidth);
+  PW = W / COLS;
+  PH = H / ROWS;
 
-  PW = BOARD_WIDTH / COLS;
-  PH = BOARD_HEIGHT / ROWS;
-
-  board.style.width = BOARD_WIDTH + "px";
+  board.style.width = W + "px";
   board.style.height = PH * (ROWS + BUFFER) + "px";
 
-  drawBufferLine();
-
-  const cells = [];
-  for (let y = 0; y < ROWS + BUFFER; y++)
-    for (let x = 0; x < COLS; x++)
-      cells.push({ x, y });
-  cells.sort(() => Math.random() - 0.5);
-
-  for (let y = 0; y < ROWS; y++) {
-    for (let x = 0; x < COLS; x++) {
-      const cell = cells.pop();
-
-      const el = document.createElement("div");
-      el.className = "piece";
-      el.style.width = PW + "px";
-      el.style.height = PH + "px";
-      el.style.backgroundImage = `url(${src})`;
-      el.style.backgroundSize = `${BOARD_WIDTH}px ${BOARD_HEIGHT}px`;
-      el.style.backgroundPosition = `-${x * PW}px -${y * PH}px`;
-      el.style.left = cell.x * PW + "px";
-      el.style.top  = cell.y * PH + "px";
-
-      board.appendChild(el);
-
-      const piece = {
-        el,
-        correctX: x,
-        correctY: y,
-        gridX: cell.x,
-        gridY: cell.y,
-        locked: false,
-        groupId: nextGroupId
-      };
-
-      groups[nextGroupId] = [piece];
-      nextGroupId++;
-      pieces.push(piece);
-
-      el.addEventListener("pointerdown", e => startDrag(e, piece));
-    }
-  }
-
-  board.addEventListener("pointermove", onDrag);
-  board.addEventListener("pointerup", stopDrag);
-  board.addEventListener("pointercancel", stopDrag);
-}
-
-function drawBufferLine() {
   const line = document.createElement("div");
   line.className = "buffer-line";
-  line.style.top = (PH * ROWS) + "px";
+  line.style.top = PH * ROWS + "px";
   board.appendChild(line);
+
+  let cells = [];
+  for (let y = 0; y < ROWS + BUFFER; y++)
+    for (let x = 0; x < COLS; x++)
+      cells.push({x,y});
+  cells.sort(() => Math.random() - 0.5);
+
+  let gid = 0;
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const c = cells.pop();
+      const el = document.createElement("div");
+      el.className = "piece";
+      el.style.width = PW+"px";
+      el.style.height = PH+"px";
+      el.style.backgroundImage = `url(${src})`;
+      el.style.backgroundSize = `${W}px ${H}px`;
+      el.style.backgroundPosition = `-${x*PW}px -${y*PH}px`;
+      board.appendChild(el);
+
+      const p = {
+        el,
+        correctX:x, correctY:y,
+        gridX:c.x, gridY:c.y,
+        locked:false,
+        groupId:gid
+      };
+      pieces.push(p);
+      groups[gid] = [p];
+      gid++;
+
+      el.addEventListener("pointerdown", e => startDrag(e,p));
+    }
+  }
+  rebuildGrid();
+  render();
+  board.onpointermove = onDrag;
+  board.onpointerup = stopDrag;
+  board.onpointercancel = stopDrag;
 }
 
-/* ===== DRAG ===== */
-function startDrag(e, piece) {
-  if (piece.locked || activePointerId !== null) return;
+/* ===================== GRID ===================== */
+function rebuildGrid() {
+  grid = Array.from({length:ROWS+BUFFER},()=>Array(COLS).fill(null));
+  pieces.forEach(p => {
+    if (grid[p.gridY] && grid[p.gridY][p.gridX] === null)
+      grid[p.gridY][p.gridX] = p;
+  });
+}
 
+/* ===================== DRAG ===================== */
+function startDrag(e,p) {
+  if (p.locked || activePointerId) return;
   activePointerId = e.pointerId;
-  piece.el.setPointerCapture(e.pointerId);
-
-  dragGroup = groups[piece.groupId];
-  const r = piece.el.getBoundingClientRect();
+  p.el.setPointerCapture(e.pointerId);
+  dragGroup = groups[p.groupId];
+  const r = p.el.getBoundingClientRect();
   offsetX = e.clientX - r.left;
   offsetY = e.clientY - r.top;
-
-  dragGroup.forEach(p => p.el.classList.add("dragging"));
+  dragGroup.forEach(x=>x.el.classList.add("dragging"));
 }
 
 function onDrag(e) {
-  if (!dragGroup || e.pointerId !== activePointerId) return;
-
-  dragGroup.forEach(p => {
-    const dx = (p.correctX - dragGroup[0].correctX) * PW;
-    const dy = (p.correctY - dragGroup[0].correctY) * PH;
-    p.el.style.left =
-      e.clientX - board.offsetLeft - offsetX + dx + "px";
-    p.el.style.top =
-      e.clientY - board.offsetTop  - offsetY + dy + "px";
+  if (!dragGroup || e.pointerId!==activePointerId) return;
+  dragGroup.forEach(p=>{
+    const dx = (p.correctX-dragGroup[0].correctX)*PW;
+    const dy = (p.correctY-dragGroup[0].correctY)*PH;
+    p.el.style.left = e.clientX - board.offsetLeft - offsetX + dx + "px";
+    p.el.style.top  = e.clientY - board.offsetTop  - offsetY + dy + "px";
   });
 }
 
 function stopDrag() {
   if (!dragGroup) return;
-
-  placeGroup(dragGroup);
-  dragGroup.forEach(p => p.el.classList.remove("dragging"));
+  snapGroup(dragGroup);
+  dragGroup.forEach(p=>p.el.classList.remove("dragging"));
   dragGroup = null;
   activePointerId = null;
-
-  checkLockMergeAndWin();
+  resolveCollisions();
+  lockMergeWin();
 }
 
-/* ===== SNAP + ÇAKIŞMA ÇÖZÜMÜ ===== */
-function placeGroup(group) {
-  const base = group[0];
+/* ===================== SNAP ===================== */
+function snapGroup(g) {
+  const b = g[0];
+  const rx = b.el.offsetLeft / PW;
+  const ry = b.el.offsetTop / PH;
+  const tx = Math.round(rx);
+  const ty = Math.round(ry);
 
-  const rawX = base.el.offsetLeft / PW;
-  const rawY = base.el.offsetTop / PH;
+  const ok = Math.abs(rx-tx)<SNAP_THRESHOLD &&
+             Math.abs(ry-ty)<SNAP_THRESHOLD &&
+             tx>=0 && tx<COLS && ty>=0 && ty<ROWS;
 
-  const tx = Math.round(rawX);
-  const ty = Math.round(rawY);
+  if (!ok) return;
 
-  const dx = Math.abs(rawX - tx);
-  const dy = Math.abs(rawY - ty);
-
-  const canSnap =
-    dx < SNAP_THRESHOLD &&
-    dy < SNAP_THRESHOLD &&
-    tx >= 0 && tx < COLS &&
-    ty >= 0 && ty < ROWS;
-
-  group.forEach(p => {
-    if (canSnap) {
-      p.gridX = tx + (p.correctX - base.correctX);
-      p.gridY = ty + (p.correctY - base.correctY);
-    }
-  });
-
-  // ÇAKIŞMA VAR MI?
-  group.forEach(p => {
-    const other = pieceAt(p.gridX, p.gridY, p);
-    if (other && !other.locked) {
-      moveToNearestEmpty(other);
-    }
-  });
-
-  group.forEach(p => {
-    p.el.style.left = p.gridX * PW + "px";
-    p.el.style.top  = p.gridY * PH + "px";
+  g.forEach(p=>{
+    p.gridX = tx + (p.correctX-b.correctX);
+    p.gridY = ty + (p.correctY-b.correctY);
   });
 }
 
-/* ===== BOŞ YER BUL ===== */
-function moveToNearestEmpty(piece) {
-  const maxY = ROWS + BUFFER - 1;
+/* ===================== COLLISION (BFS) ===================== */
+function resolveCollisions() {
+  rebuildGrid();
+  pieces.forEach(p=>{
+    if (p.locked) return;
+    if (grid[p.gridY][p.gridX] !== p) {
+      const spot = bfsEmpty(p.gridX,p.gridY);
+      p.gridX = spot.x;
+      p.gridY = spot.y;
+      rebuildGrid();
+    }
+  });
+  render();
+}
 
-  for (let r = 1; r <= COLS + maxY; r++) {
-    for (let dx = -r; dx <= r; dx++) {
-      for (let dy = -r; dy <= r; dy++) {
-        const nx = piece.gridX + dx;
-        const ny = piece.gridY + dy;
+function bfsEmpty(x,y) {
+  const q=[[x,y]];
+  const seen=new Set([x+","+y]);
+  const maxY = ROWS+BUFFER-1;
 
-        if (nx < 0 || nx >= COLS) continue;
-        if (ny < 0 || ny > maxY) continue;
-
-        if (!pieceAt(nx, ny)) {
-          piece.gridX = nx;
-          piece.gridY = ny;
-          return;
-        }
-      }
+  while(q.length){
+    const [cx,cy]=q.shift();
+    const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+    for(const[dX,dY]of dirs){
+      const nx=cx+dX, ny=cy+dY;
+      const k=nx+","+ny;
+      if(nx<0||nx>=COLS||ny<0||ny>maxY||seen.has(k))continue;
+      if(!grid[ny][nx]) return {x:nx,y:ny};
+      seen.add(k);
+      q.push([nx,ny]);
     }
   }
+  return {x, y:maxY};
 }
 
-/* ===== KİLİT + BİRLEŞME + KAZANMA ===== */
-function checkLockMergeAndWin() {
-  pieces.forEach(p => {
-    if (!p.locked &&
-        p.gridX === p.correctX &&
-        p.gridY === p.correctY) {
-      p.locked = true;
+/* ===================== LOCK + MERGE + WIN ===================== */
+function lockMergeWin() {
+  pieces.forEach(p=>{
+    if(!p.locked && p.gridX===p.correctX && p.gridY===p.correctY){
+      p.locked=true;
       p.el.classList.add("locked");
     }
   });
 
-  for (let a of pieces) {
-    for (let b of pieces) {
-      if (a.groupId === b.groupId) continue;
-      if (!a.locked || !b.locked) continue;
+  for(let a of pieces){
+    for(let b of pieces){
+      if(a.groupId===b.groupId)continue;
+      if(!a.locked||!b.locked)continue;
 
-      const right =
-        a.correctX + 1 === b.correctX &&
-        a.gridX + 1 === b.gridX &&
-        a.gridY === b.gridY;
+      const right=a.correctX+1===b.correctX &&
+                  a.gridX+1===b.gridX &&
+                  a.gridY===b.gridY;
+      const down=a.correctY+1===b.correctY &&
+                 a.gridY+1===b.gridY &&
+                 a.gridX===b.gridX;
 
-      const down =
-        a.correctY + 1 === b.correctY &&
-        a.gridY + 1 === b.gridY &&
-        a.gridX === b.gridX;
-
-      if (right || down) {
-        mergeGroups(a.groupId, b.groupId);
+      if(right||down){
+        groups[b.groupId].forEach(p=>{
+          p.groupId=a.groupId;
+          groups[a.groupId].push(p);
+        });
+        delete groups[b.groupId];
         return;
       }
     }
   }
 
-  if (!finished && pieces.every(
-    p => p.locked &&
-         p.gridX === p.correctX &&
-         p.gridY === p.correctY
-  )) {
-    finished = true;
-    showWin();
+  if(!finished && pieces.every(p=>p.locked)){
+    finished=true;
+    win();
   }
 }
 
-function mergeGroups(g1, g2) {
-  const A = groups[g1];
-  const B = groups[g2];
-  B.forEach(p => {
-    p.groupId = g1;
-    A.push(p);
+/* ===================== RENDER ===================== */
+function render(){
+  pieces.forEach(p=>{
+    p.el.style.left = p.gridX*PW+"px";
+    p.el.style.top  = p.gridY*PH+"px";
   });
-  delete groups[g2];
 }
 
-/* ===== HELPER ===== */
-function pieceAt(x, y, ignore) {
-  return pieces.find(p =>
-    p.gridX === x &&
-    p.gridY === y &&
-    p !== ignore
-  );
-}
-
-/* ===== BİTİŞ ===== */
-function showWin() {
-  const o = document.getElementById("winOverlay");
+/* ===================== WIN ===================== */
+function win(){
+  const o=document.getElementById("winOverlay");
   o.classList.add("show");
-
-  if (navigator.vibrate) {
-    navigator.vibrate([100, 50, 100]);
-  }
-
-  setTimeout(() => {
-    o.classList.remove("show");
-  }, 1500);
+  navigator.vibrate?.([100,50,100]);
+  setTimeout(()=>o.classList.remove("show"),1500);
 }
 </script>
-
 </body>
 </html>
