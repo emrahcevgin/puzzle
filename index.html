@@ -46,7 +46,7 @@ body {
   font-size: 32px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity .3s;
+  transition: .3s;
 }
 #win.show { opacity: 1; }
 </style>
@@ -57,7 +57,6 @@ body {
 <div id="top">
   <input type="file" id="file" accept="image/*">
 </div>
-
 <div id="board"></div>
 <div id="win">🎉 Puzzle Tamamlandı!</div>
 
@@ -82,9 +81,7 @@ input.onchange = function () {
   var f = input.files[0];
   if (!f) return;
   var r = new FileReader();
-  r.onload = function (e) {
-    init(e.target.result);
-  };
+  r.onload = function (e) { init(e.target.result); };
   r.readAsDataURL(f);
 };
 
@@ -109,11 +106,10 @@ function init(src) {
     board.appendChild(bl);
 
     var cells = [];
-    for (var y = 0; y < ROWS + BUFFER; y++) {
-      for (var x = 0; x < COLS; x++) {
+    for (var y = 0; y < ROWS + BUFFER; y++)
+      for (var x = 0; x < COLS; x++)
         cells.push({ x: x, y: y });
-      }
-    }
+
     cells.sort(function () { return Math.random() - 0.5; });
 
     var gid = 0;
@@ -134,10 +130,8 @@ function init(src) {
 
         var p = {
           el: el,
-          cx: rx,
-          cy: ry,
-          x: c.x,
-          y: c.y,
+          cx: rx, cy: ry,
+          x: c.x, y: c.y,
           locked: false,
           gid: gid
         };
@@ -187,25 +181,84 @@ board.onpointermove = function (e) {
 board.onpointerup = drop;
 board.onpointercancel = drop;
 
+/* ===== DROP + KAYMA ===== */
 function drop() {
   if (!dragging) return;
 
   var base = dragging[0];
-  var nx = Math.round(base.el.offsetLeft / PW);
-  var ny = Math.round(base.el.offsetTop  / PH);
+  var tx = Math.round(base.el.offsetLeft / PW);
+  var ty = Math.round(base.el.offsetTop  / PH);
 
+  var grid = buildGrid(dragging);
+
+  // Hedef hücre doluysa → oradaki parça kayar
+  if (grid[ty] && grid[ty][tx]) {
+    moveToEmpty(grid[ty][tx], grid);
+  }
+
+  // Drag edilen grup yerleşir
   for (var i = 0; i < dragging.length; i++) {
-    dragging[i].x = nx + (dragging[i].x - base.x);
-    dragging[i].y = ny + (dragging[i].y - base.y);
-    dragging[i].el.style.left = (dragging[i].x * PW) + "px";
-    dragging[i].el.style.top  = (dragging[i].y * PH) + "px";
-    dragging[i].el.classList.remove("dragging");
+    dragging[i].x = tx + (dragging[i].x - base.x);
+    dragging[i].y = ty + (dragging[i].y - base.y);
+  }
+
+  for (var j = 0; j < dragging.length; j++) {
+    dragging[j].el.style.left = (dragging[j].x * PW) + "px";
+    dragging[j].el.style.top  = (dragging[j].y * PH) + "px";
+    dragging[j].el.classList.remove("dragging");
   }
 
   dragging = null;
   pointerId = null;
 
   lockMergeWin();
+}
+
+/* ===== GRID ===== */
+function buildGrid(ignoreGroup) {
+  var grid = [];
+  for (var y = 0; y < ROWS + BUFFER; y++) {
+    grid[y] = [];
+    for (var x = 0; x < COLS; x++) grid[y][x] = null;
+  }
+
+  for (var i = 0; i < pieces.length; i++) {
+    var p = pieces[i];
+    if (ignoreGroup && ignoreGroup.indexOf(p) !== -1) continue;
+    if (p.x >= 0 && p.x < COLS && p.y >= 0 && p.y < ROWS + BUFFER) {
+      grid[p.y][p.x] = p;
+    }
+  }
+  return grid;
+}
+
+/* ===== KAYAN PARÇA ===== */
+function moveToEmpty(p, grid) {
+  if (p.locked) return;
+
+  // 1) Buffer satırı
+  for (var x = 0; x < COLS; x++) {
+    if (!grid[ROWS][x]) {
+      grid[p.y][p.x] = null;
+      p.x = x;
+      p.y = ROWS;
+      grid[ROWS][x] = p;
+      return;
+    }
+  }
+
+  // 2) Üst grid
+  for (var y = 0; y < ROWS; y++) {
+    for (var x2 = 0; x2 < COLS; x2++) {
+      if (!grid[y][x2]) {
+        grid[p.y][p.x] = null;
+        p.x = x2;
+        p.y = y;
+        grid[y][x2] = p;
+        return;
+      }
+    }
+  }
 }
 
 /* ===== LOCK + MERGE + WIN ===== */
@@ -244,11 +297,8 @@ function lockMergeWin() {
   }
 
   if (done) {
-    var win = document.getElementById("win");
-    win.classList.add("show");
-    if (navigator.vibrate) {
-      navigator.vibrate([100,50,100]);
-    }
+    document.getElementById("win").classList.add("show");
+    if (navigator.vibrate) navigator.vibrate([100,50,100]);
   }
 }
 </script>
