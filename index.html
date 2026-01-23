@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-
 <title>Puzzle</title>
 
 <link rel="manifest" href="manifest.json">
@@ -36,9 +35,20 @@ body {
   transition: left .2s ease, top .2s ease;
 }
 
+.piece.locked {
+  border: none;
+}
+
 .piece.dragging {
   transition: none;
   z-index: 10;
+}
+
+.buffer-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 2px dashed #444;
 }
 </style>
 </head>
@@ -52,14 +62,10 @@ body {
 <div id="board"></div>
 
 <script>
-/* ===== SERVICE WORKER ===== */
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js");
-}
-
 /* ===== AYAR ===== */
 const ROWS = 3;
 const COLS = 5;
+const BUFFER = 1;
 
 /* ===== DOM ===== */
 const board = document.getElementById("board");
@@ -68,51 +74,62 @@ const input = document.getElementById("imageInput");
 /* ===== STATE ===== */
 let BOARD_WIDTH, BOARD_HEIGHT, PW, PH;
 let pieces = [];
-let dragPiece = null;
+let groups = {};
+let nextGroupId = 0;
+
+let dragGroup = null;
 let offsetX = 0;
 let offsetY = 0;
+let activePointerId = null;
 
-/* ===== FOTOĞRAF SEÇ ===== */
-input.addEventListener("change", () => {
+/* ===== SERVICE WORKER ===== */
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+
+/* ===== FOTOĞRAF ===== */
+input.onchange = () => {
   const file = input.files[0];
   if (!file) return;
 
   const reader = new FileReader();
   reader.onload = e => buildPuzzle(e.target.result);
   reader.readAsDataURL(file);
-});
+};
 
-/* ===== PUZZLE OLUŞTUR ===== */
 function buildPuzzle(src) {
   const img = new Image();
-  img.onload = () => {
-    setupBoard(img, src);
-  };
+  img.onload = () => setupBoard(img, src);
   img.src = src;
 }
 
+/* ===== BOARD ===== */
 function setupBoard(img, src) {
   board.innerHTML = "";
   pieces = [];
+  groups = {};
+  nextGroupId = 0;
 
   BOARD_WIDTH = Math.floor(document.documentElement.clientWidth * 0.95);
   BOARD_HEIGHT = BOARD_WIDTH * (img.naturalHeight / img.naturalWidth);
 
-  board.style.width = BOARD_WIDTH + "px";
-  board.style.height = BOARD_HEIGHT + "px";
-
   PW = BOARD_WIDTH / COLS;
   PH = BOARD_HEIGHT / ROWS;
 
-  let cells = [];
-  for (let y=0;y<ROWS;y++)
-    for (let x=0;x<COLS;x++)
+  board.style.width = BOARD_WIDTH + "px";
+  board.style.height = PH * (ROWS + BUFFER) + "px";
+
+  drawBufferLine();
+
+  const cells = [];
+  for (let y = 0; y < ROWS + BUFFER; y++)
+    for (let x = 0; x < COLS; x++)
       cells.push({x,y});
   cells.sort(()=>Math.random()-0.5);
 
   for (let y=0;y<ROWS;y++) {
     for (let x=0;x<COLS;x++) {
-      const pos = cells.pop();
+      const cell = cells.pop();
 
       const el = document.createElement("div");
       el.className = "piece";
@@ -121,47 +138,139 @@ function setupBoard(img, src) {
       el.style.backgroundImage = `url(${src})`;
       el.style.backgroundSize = `${BOARD_WIDTH}px ${BOARD_HEIGHT}px`;
       el.style.backgroundPosition = `-${x*PW}px -${y*PH}px`;
-      el.style.left = pos.x*PW+"px";
-      el.style.top  = pos.y*PH+"px";
+      el.style.left = cell.x*PW+"px";
+      el.style.top  = cell.y*PH+"px";
 
       board.appendChild(el);
-      pieces.push(el);
 
-      el.addEventListener("pointerdown", e => startDrag(e, el));
+      const piece = {
+        el,
+        correctX:x,
+        correctY:y,
+        gridX:cell.x,
+        gridY:cell.y,
+        locked:false,
+        groupId:nextGroupId
+      };
+
+      groups[nextGroupId] = [piece];
+      nextGroupId++;
+      pieces.push(piece);
+
+      el.addEventListener("pointerdown", e => startDrag(e,piece));
     }
   }
 
-  board.addEventListener("pointermove", drag);
+  board.addEventListener("pointermove", onDrag);
   board.addEventListener("pointerup", stopDrag);
   board.addEventListener("pointercancel", stopDrag);
 }
 
-/* ===== DRAG ===== */
-function startDrag(e, el) {
-  dragPiece = el;
-  el.setPointerCapture(e.pointerId);
-  el.classList.add("dragging");
-
-  const r = el.getBoundingClientRect();
-  offsetX = e.clientX - r.left;
-  offsetY = e.clientY - r.top;
+function drawBufferLine() {
+  const line = document.createElement("div");
+  line.className = "buffer-line";
+  line.style.top = (PH * ROWS) + "px";
+  board.appendChild(line);
 }
 
-function drag(e) {
-  if (!dragPiece) return;
-  dragPiece.style.left =
-    e.clientX - board.offsetLeft - offsetX + "px";
-  dragPiece.style.top =
-    e.clientY - board.offsetTop - offsetY + "px";
+/* ===== DRAG ===== */
+function startDrag(e,piece) {
+  if (piece.locked || activePointerId!==null) return;
+
+  activePointerId = e.pointerId;
+  piece.el.setPointerCapture(e.pointerId);
+
+  dragGroup = groups[piece.groupId];
+  const r = piece.el.getBoundingClientRect();
+  offsetX = e.clientX - r.left;
+  offsetY = e.clientY - r.top;
+
+  dragGroup.forEach(p=>p.el.classList.add("dragging"));
+}
+
+function onDrag(e) {
+  if (!dragGroup || e.pointerId!==activePointerId) return;
+
+  dragGroup.forEach(p=>{
+    const dx = (p.correctX-dragGroup[0].correctX)*PW;
+    const dy = (p.correctY-dragGroup[0].correctY)*PH;
+    p.el.style.left =
+      e.clientX-board.offsetLeft-offsetX+dx+"px";
+    p.el.style.top =
+      e.clientY-board.offsetTop-offsetY+dy+"px";
+  });
 }
 
 function stopDrag() {
-  if (!dragPiece) return;
-  dragPiece.classList.remove("dragging");
-  dragPiece = null;
+  if (!dragGroup) return;
+
+  placeGroup(dragGroup);
+  dragGroup.forEach(p=>p.el.classList.remove("dragging"));
+  dragGroup=null;
+  activePointerId=null;
+
+  checkLockAndMerge();
+}
+
+/* ===== YERLEŞTİR ===== */
+function placeGroup(group) {
+  const base = group[0];
+  const gx = Math.round(base.el.offsetLeft / PW);
+  const gy = Math.round(base.el.offsetTop  / PH);
+
+  group.forEach(p=>{
+    p.gridX = gx + (p.correctX-base.correctX);
+    p.gridY = gy + (p.correctY-base.correctY);
+
+    p.el.style.left = p.gridX*PW+"px";
+    p.el.style.top  = p.gridY*PH+"px";
+  });
+}
+
+/* ===== KİLİT + BİRLEŞME ===== */
+function checkLockAndMerge() {
+  pieces.forEach(p=>{
+    if (!p.locked &&
+        p.gridX===p.correctX &&
+        p.gridY===p.correctY) {
+      p.locked = true;
+      p.el.classList.add("locked");
+    }
+  });
+
+  for (let a of pieces) {
+    for (let b of pieces) {
+      if (a.groupId===b.groupId) continue;
+      if (!a.locked || !b.locked) continue;
+
+      const right =
+        a.correctX+1===b.correctX &&
+        a.gridX+1===b.gridX &&
+        a.gridY===b.gridY;
+
+      const down =
+        a.correctY+1===b.correctY &&
+        a.gridY+1===b.gridY &&
+        a.gridX===b.gridX;
+
+      if (right || down) {
+        mergeGroups(a.groupId,b.groupId);
+        return;
+      }
+    }
+  }
+}
+
+function mergeGroups(g1,g2) {
+  const A = groups[g1];
+  const B = groups[g2];
+  B.forEach(p=>{
+    p.groupId=g1;
+    A.push(p);
+  });
+  delete groups[g2];
 }
 </script>
 
 </body>
 </html>
-
