@@ -6,77 +6,41 @@
 <title>Puzzle</title>
 
 <style>
-body{
-  margin:0;
-  background:#111;
-  color:#fff;
-  font-family:Arial;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-}
+body{margin:0;background:#111;color:#fff;font-family:Arial;display:flex;flex-direction:column;align-items:center}
 #top{padding:10px}
-#board{
-  position:relative;
-  background:#000;
-  border:2px solid #333;
-  touch-action:none;
-}
-.piece{
-  position:absolute;
-  border:1px solid #222;
-  background-repeat:no-repeat;
-  transition:left .25s ease, top .25s ease;
-}
+#board{position:relative;background:#000;border:2px solid #333;touch-action:none}
+.piece{position:absolute;border:1px solid #222;background-repeat:no-repeat;transition:left .25s,top .25s}
 .piece.dragging{transition:none;z-index:10}
 .piece.locked{border:none}
-.buffer-line{
-  position:absolute;
-  left:0;right:0;
-  border-top:2px dashed #555;
-}
-#win{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.7);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:32px;
-  opacity:0;
-  pointer-events:none;
-  transition:.4s;
-}
+.buffer-line{position:absolute;left:0;right:0;border-top:2px dashed #555}
+#win{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;
+font-size:32px;opacity:0;pointer-events:none;transition:.3s}
 #win.show{opacity:1}
 </style>
 </head>
 
 <body>
 
-<div id="top">
-  <input type="file" id="file" accept="image/*">
-</div>
-
+<div id="top"><input type="file" id="file" accept="image/*"></div>
 <div id="board"></div>
 <div id="win">🎉 Tebrikler! Puzzle Tamamlandı</div>
 
 <script>
-/* ==== AYAR ==== */
+/* ===== AYAR ===== */
 var ROWS=3, COLS=5, BUFFER=1;
 
-/* ==== STATE ==== */
-var PW, PH;
+/* ===== STATE ===== */
+var PW,PH;
 var pieces=[], groups={};
 var dragging=null, pointerId=null, ox=0, oy=0;
 
-/* ==== DOM ==== */
+/* ===== DOM ===== */
 var board=document.getElementById("board");
 var input=document.getElementById("file");
 
-/* ==== FOTO ==== */
+/* ===== FOTO ===== */
 input.onchange=function(){
-  var f=input.files[0];
-  if(!f) return;
+  var f=input.files[0]; if(!f) return;
   var r=new FileReader();
   r.onload=function(e){ init(e.target.result); };
   r.readAsDataURL(f);
@@ -133,14 +97,14 @@ function init(src){
   img.src=src;
 }
 
-/* ==== DRAG ==== */
+/* ===== DRAG ===== */
 function startDrag(e,p){
   if(p.locked||pointerId!==null) return;
   pointerId=e.pointerId;
   dragging=groups[p.gid];
   var r=p.el.getBoundingClientRect();
   ox=e.clientX-r.left; oy=e.clientY-r.top;
-  dragging.forEach(function(q){ q.el.classList.add("dragging"); });
+  dragging.forEach(function(q){q.el.classList.add("dragging");});
   p.el.setPointerCapture(pointerId);
 }
 
@@ -148,17 +112,15 @@ board.onpointermove=function(e){
   if(!dragging||e.pointerId!==pointerId) return;
   var base=dragging[0];
   dragging.forEach(function(p){
-    p.el.style.left=
-      e.clientX-board.offsetLeft-ox+(p.x-base.x)*PW+"px";
-    p.el.style.top =
-      e.clientY-board.offsetTop -oy+(p.y-base.y)*PH+"px";
+    p.el.style.left=e.clientX-board.offsetLeft-ox+(p.x-base.x)*PW+"px";
+    p.el.style.top =e.clientY-board.offsetTop -oy+(p.y-base.y)*PH+"px";
   });
 };
 
 board.onpointerup=drop;
 board.onpointercancel=drop;
 
-/* ==== DROP (TEK OTORİTE) ==== */
+/* ===== DROP (STABİL) ===== */
 function drop(){
   if(!dragging) return;
 
@@ -166,78 +128,65 @@ function drop(){
   var tx=Math.round(base.el.offsetLeft/PW);
   var ty=Math.round(base.el.offsetTop /PH);
 
-  /* hedefler */
   var targets=[];
   dragging.forEach(function(p){
-    targets.push({
-      p:p,
-      x:tx+(p.x-base.x),
-      y:ty+(p.y-base.y)
-    });
+    targets.push({p:p,x:tx+(p.x-base.x),y:ty+(p.y-base.y)});
   });
 
-  /* grid */
-  var grid=[];
-  for(var y=0;y<ROWS+BUFFER;y++){
-    grid[y]=[];
-    for(var x=0;x<COLS;x++) grid[y][x]=null;
-  }
+  var grid=buildGrid(dragging);
 
-  pieces.forEach(function(p){
-    if(dragging.indexOf(p)!==-1) return;
-    grid[p.y][p.x]=p;
-  });
-
-  /* çakışanları kaydır */
   targets.forEach(function(t){
-    if(grid[t.y] && grid[t.y][t.x]){
-      moveToEmpty(grid[t.y][t.x],grid);
+    var occ=grid[t.y]&&grid[t.y][t.x];
+    if(occ){
+      if(occ.locked){
+        var alt=findEmpty(grid);
+        t.x=alt.x; t.y=alt.y;
+      }else{
+        moveToEmpty(occ,grid);
+      }
     }
   });
 
-  /* drag grubu yerleşir */
   targets.forEach(function(t){
-    t.p.x=t.x;
-    t.p.y=t.y;
+    t.p.x=t.x; t.p.y=t.y;
     grid[t.y][t.x]=t.p;
   });
 
-  /* DOM yaz */
   pieces.forEach(drawPiece);
-
-  dragging.forEach(function(p){
-    p.el.classList.remove("dragging");
-  });
-
-  dragging=null;
-  pointerId=null;
+  dragging.forEach(function(p){p.el.classList.remove("dragging");});
+  dragging=null; pointerId=null;
 
   lockMergeAndWin();
 }
 
-/* ==== BOŞ YERE KAYDIR ==== */
+/* ===== GRID ===== */
+function buildGrid(ignore){
+  var g=[];
+  for(var y=0;y<ROWS+BUFFER;y++){
+    g[y]=[];
+    for(var x=0;x<COLS;x++) g[y][x]=null;
+  }
+  pieces.forEach(function(p){
+    if(ignore.indexOf(p)!==-1) return;
+    g[p.y][p.x]=p;
+  });
+  return g;
+}
+
+/* ===== BOŞ YER ===== */
+function findEmpty(grid){
+  for(var x=0;x<COLS;x++) if(!grid[ROWS][x]) return {x:x,y:ROWS};
+  for(var y=0;y<ROWS;y++)
+    for(var x2=0;x2<COLS;x2++)
+      if(!grid[y][x2]) return {x:x2,y:y};
+}
+
+/* ===== KAYDIR ===== */
 function moveToEmpty(p,grid){
-  if(p.locked) return;
-
-  for(var x=0;x<COLS;x++){
-    if(!grid[ROWS][x]){
-      grid[p.y][p.x]=null;
-      p.x=x; p.y=ROWS;
-      grid[ROWS][x]=p;
-      return;
-    }
-  }
-
-  for(var y=0;y<ROWS;y++){
-    for(var x2=0;x2<COLS;x2++){
-      if(!grid[y][x2]){
-        grid[p.y][p.x]=null;
-        p.x=x2; p.y=y;
-        grid[y][x2]=p;
-        return;
-      }
-    }
-  }
+  var e=findEmpty(grid);
+  grid[p.y][p.x]=null;
+  p.x=e.x; p.y=e.y;
+  grid[p.y][p.x]=p;
 }
 
 function drawPiece(p){
@@ -245,7 +194,7 @@ function drawPiece(p){
   p.el.style.top =(p.y*PH)+"px";
 }
 
-/* ==== LOCK + MERGE + WIN ==== */
+/* ===== LOCK + MERGE + WIN ===== */
 function lockMergeAndWin(){
   pieces.forEach(function(p){
     if(!p.locked && p.x===p.cx && p.y===p.cy){
@@ -258,14 +207,11 @@ function lockMergeAndWin(){
     for(var j=0;j<pieces.length;j++){
       var a=pieces[i], b=pieces[j];
       if(a.gid===b.gid||!a.locked||!b.locked) continue;
-
       var right=a.cx+1===b.cx && a.x+1===b.x && a.y===b.y;
       var down =a.cy+1===b.cy && a.y+1===b.y && a.x===b.x;
-
       if(right||down){
         groups[b.gid].forEach(function(p){
-          p.gid=a.gid;
-          groups[a.gid].push(p);
+          p.gid=a.gid; groups[a.gid].push(p);
         });
         delete groups[b.gid];
         break;
