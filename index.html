@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+<title>Puzzle</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111">
+
+<style>
+body {
+  margin: 0;
+  background: #111;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#top { padding: 10px; }
+
+#board {
+  position: relative;
+  background: #000;
+  border: 2px solid #333;
+  touch-action: none;
+}
+
+.piece {
+  position: absolute;
+  background-repeat: no-repeat;
+  border: 1px solid #222;
+  transition: left .2s ease, top .2s ease;
+}
+
+.piece.dragging {
+  transition: none;
+  z-index: 10;
+}
+</style>
+</head>
+
+<body>
+
+<div id="top">
+  <input type="file" id="imageInput" accept="image/*">
+</div>
+
+<div id="board"></div>
+
+<script>
+/* ===== SERVICE WORKER ===== */
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+
+/* ===== AYAR ===== */
+const ROWS = 3;
+const COLS = 5;
+
+/* ===== DOM ===== */
+const board = document.getElementById("board");
+const input = document.getElementById("imageInput");
+
+/* ===== STATE ===== */
+let BOARD_WIDTH, BOARD_HEIGHT, PW, PH;
+let pieces = [];
+let dragPiece = null;
+let offsetX = 0;
+let offsetY = 0;
+
+/* ===== FOTOĞRAF SEÇ ===== */
+input.addEventListener("change", () => {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = e => buildPuzzle(e.target.result);
+  reader.readAsDataURL(file);
+});
+
+/* ===== PUZZLE OLUŞTUR ===== */
+function buildPuzzle(src) {
+  const img = new Image();
+  img.onload = () => {
+    setupBoard(img, src);
+  };
+  img.src = src;
+}
+
+function setupBoard(img, src) {
+  board.innerHTML = "";
+  pieces = [];
+
+  BOARD_WIDTH = Math.floor(document.documentElement.clientWidth * 0.95);
+  BOARD_HEIGHT = BOARD_WIDTH * (img.naturalHeight / img.naturalWidth);
+
+  board.style.width = BOARD_WIDTH + "px";
+  board.style.height = BOARD_HEIGHT + "px";
+
+  PW = BOARD_WIDTH / COLS;
+  PH = BOARD_HEIGHT / ROWS;
+
+  let cells = [];
+  for (let y=0;y<ROWS;y++)
+    for (let x=0;x<COLS;x++)
+      cells.push({x,y});
+  cells.sort(()=>Math.random()-0.5);
+
+  for (let y=0;y<ROWS;y++) {
+    for (let x=0;x<COLS;x++) {
+      const pos = cells.pop();
+
+      const el = document.createElement("div");
+      el.className = "piece";
+      el.style.width = PW+"px";
+      el.style.height = PH+"px";
+      el.style.backgroundImage = `url(${src})`;
+      el.style.backgroundSize = `${BOARD_WIDTH}px ${BOARD_HEIGHT}px`;
+      el.style.backgroundPosition = `-${x*PW}px -${y*PH}px`;
+      el.style.left = pos.x*PW+"px";
+      el.style.top  = pos.y*PH+"px";
+
+      board.appendChild(el);
+      pieces.push(el);
+
+      el.addEventListener("pointerdown", e => startDrag(e, el));
+    }
+  }
+
+  board.addEventListener("pointermove", drag);
+  board.addEventListener("pointerup", stopDrag);
+  board.addEventListener("pointercancel", stopDrag);
+}
+
+/* ===== DRAG ===== */
+function startDrag(e, el) {
+  dragPiece = el;
+  el.setPointerCapture(e.pointerId);
+  el.classList.add("dragging");
+
+  const r = el.getBoundingClientRect();
+  offsetX = e.clientX - r.left;
+  offsetY = e.clientY - r.top;
+}
+
+function drag(e) {
+  if (!dragPiece) return;
+  dragPiece.style.left =
+    e.clientX - board.offsetLeft - offsetX + "px";
+  dragPiece.style.top =
+    e.clientY - board.offsetTop - offsetY + "px";
+}
+
+function stopDrag() {
+  if (!dragPiece) return;
+  dragPiece.classList.remove("dragging");
+  dragPiece = null;
+}
+</script>
+
+</body>
+</html>
