@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-
 <title>Puzzle</title>
 
 <link rel="manifest" href="manifest.json">
@@ -20,9 +19,7 @@ body {
   align-items: center;
 }
 
-#top {
-  padding: 10px;
-}
+#top { padding: 10px; }
 
 #board {
   position: relative;
@@ -96,6 +93,7 @@ if ("serviceWorker" in navigator) {
 const ROWS = 3;
 const COLS = 5;
 const BUFFER = 1;
+const SNAP_THRESHOLD = 0.35;
 
 /* ===== DOM ===== */
 const board = document.getElementById("board");
@@ -113,15 +111,15 @@ let offsetY = 0;
 let activePointerId = null;
 let finished = false;
 
-/* ===== FOTOĞRAF SEÇ ===== */
-input.addEventListener("change", () => {
+/* ===== FOTOĞRAF ===== */
+input.onchange = () => {
   const file = input.files[0];
   if (!file) return;
 
   const reader = new FileReader();
   reader.onload = e => buildPuzzle(e.target.result);
   reader.readAsDataURL(file);
-});
+};
 
 function buildPuzzle(src) {
   const img = new Image();
@@ -152,7 +150,6 @@ function setupBoard(img, src) {
   for (let y = 0; y < ROWS + BUFFER; y++)
     for (let x = 0; x < COLS; x++)
       cells.push({ x, y });
-
   cells.sort(() => Math.random() - 0.5);
 
   for (let y = 0; y < ROWS; y++) {
@@ -240,15 +237,30 @@ function stopDrag() {
   checkLockMergeAndWin();
 }
 
-/* ===== YERLEŞTİR ===== */
+/* ===== SNAP + YERLEŞTİR ===== */
 function placeGroup(group) {
   const base = group[0];
-  const gx = Math.round(base.el.offsetLeft / PW);
-  const gy = Math.round(base.el.offsetTop  / PH);
+
+  const rawX = base.el.offsetLeft / PW;
+  const rawY = base.el.offsetTop / PH;
+
+  const tx = Math.round(rawX);
+  const ty = Math.round(rawY);
+
+  const dx = Math.abs(rawX - tx);
+  const dy = Math.abs(rawY - ty);
+
+  const canSnap =
+    dx < SNAP_THRESHOLD &&
+    dy < SNAP_THRESHOLD &&
+    tx >= 0 && tx < COLS &&
+    ty >= 0 && ty < ROWS;
 
   group.forEach(p => {
-    p.gridX = gx + (p.correctX - base.correctX);
-    p.gridY = gy + (p.correctY - base.correctY);
+    if (canSnap) {
+      p.gridX = tx + (p.correctX - base.correctX);
+      p.gridY = ty + (p.correctY - base.correctY);
+    }
     p.el.style.left = p.gridX * PW + "px";
     p.el.style.top  = p.gridY * PH + "px";
   });
@@ -284,7 +296,7 @@ function checkLockMergeAndWin() {
 
       if (right || down) {
         mergeGroups(a.groupId, b.groupId);
-        break;
+        return;
       }
     }
   }
@@ -310,7 +322,7 @@ function mergeGroups(g1, g2) {
   delete groups[g2];
 }
 
-/* ===== BİTİŞ ANİMASYONU ===== */
+/* ===== BİTİŞ ===== */
 function showWin() {
   const o = document.getElementById("winOverlay");
   o.classList.add("show");
