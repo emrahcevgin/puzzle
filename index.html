@@ -43,6 +43,13 @@ body {
   border: none;
 }
 
+.buffer-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 2px dashed #444;
+}
+
 #win {
   position: fixed;
   inset: 0;
@@ -56,25 +63,7 @@ body {
   transition: opacity .4s ease;
 }
 
-#win.show {
-  opacity: 1;
-}
-
-.confetti {
-  position: fixed;
-  width: 8px;
-  height: 14px;
-  background: hsl(var(--h),90%,60%);
-  top: -20px;
-  animation: fall 1.8s linear forwards;
-}
-
-@keyframes fall {
-  to {
-    transform: translateY(110vh) rotate(360deg);
-    opacity: 0;
-  }
-}
+#win.show { opacity: 1; }
 </style>
 </head>
 
@@ -89,9 +78,10 @@ body {
 
 <script>
 /* ================= AYAR ================= */
-const ROWS = 3, COLS = 5;
-const SNAP_DIST = 0.35;      // yumuşak snap
-const MAGNET_DIST = 0.25;    // manyetik kenar
+const ROWS = 3;
+const COLS = 5;
+const BUFFER = 1;
+const SNAP_DIST = 0.35;
 
 let PW, PH;
 let pieces = [];
@@ -125,10 +115,15 @@ function createPuzzle(src) {
     PH = H / ROWS;
 
     board.style.width = W + "px";
-    board.style.height = H + "px";
+    board.style.height = PH * (ROWS + BUFFER) + "px";
+
+    const line = document.createElement("div");
+    line.className = "buffer-line";
+    line.style.top = PH * ROWS + "px";
+    board.appendChild(line);
 
     let cells = [];
-    for (let y=0;y<ROWS;y++)
+    for (let y=0;y<ROWS+BUFFER;y++)
       for (let x=0;x<COLS;x++)
         cells.push({x,y});
     cells.sort(()=>Math.random()-.5);
@@ -197,25 +192,32 @@ board.onpointermove = e => {
 board.onpointerup = () => drop();
 board.onpointercancel = () => drop();
 
-/* ================= DROP ================= */
+/* ================= DROP + KAYMA ================= */
 function drop() {
   if (!dragging) return;
 
   const base = dragging[0];
   const rx = base.el.offsetLeft / PW;
   const ry = base.el.offsetTop  / PH;
-
   const tx = Math.round(rx);
   const ty = Math.round(ry);
 
-  if (Math.abs(rx-tx) < SNAP_DIST && Math.abs(ry-ty) < SNAP_DIST) {
+  if (Math.abs(rx-tx)<SNAP_DIST && Math.abs(ry-ty)<SNAP_DIST) {
     dragging.forEach(p=>{
       p.x = tx + (p.x-base.x);
       p.y = ty + (p.y-base.y);
     });
   }
 
-  applyMagnetism(dragging);
+  // ÇAKIŞMA VARSA → ALTTAKİ PARÇA BUFFER'A
+  dragging.forEach(p=>{
+    pieces.forEach(o=>{
+      if (o === p || o.locked) return;
+      if (o.x === p.x && o.y === p.y) {
+        moveToBuffer(o);
+      }
+    });
+  });
 
   dragging.forEach(p=>{
     p.el.style.left = p.x*PW+"px";
@@ -229,34 +231,15 @@ function drop() {
   checkLockAndMerge();
 }
 
-/* ================= MANYETİK KENAR ================= */
-function applyMagnetism(group) {
-  group.forEach(p=>{
-    pieces.forEach(o=>{
-      if (!o.locked || o.gid === p.gid) return;
-
-      const dx = o.x - p.x;
-      const dy = o.y - p.y;
-
-      // sağ-sol komşu
-      if (dy === 0 && Math.abs(dx) === 1) {
-        if (Math.abs(p.el.offsetLeft - o.el.offsetLeft + dx*PW) < PW*MAGNET_DIST) {
-          group.forEach(g=>{
-            g.x += dx;
-          });
-        }
-      }
-
-      // alt-üst komşu
-      if (dx === 0 && Math.abs(dy) === 1) {
-        if (Math.abs(p.el.offsetTop - o.el.offsetTop + dy*PH) < PH*MAGNET_DIST) {
-          group.forEach(g=>{
-            g.y += dy;
-          });
-        }
-      }
-    });
-  });
+/* ================= BUFFER ================= */
+function moveToBuffer(piece) {
+  for (let x=0;x<COLS;x++) {
+    if (!pieces.find(p=>p.x===x && p.y===ROWS)) {
+      piece.x = x;
+      piece.y = ROWS;
+      return;
+    }
+  }
 }
 
 /* ================= LOCK + MERGE + WIN ================= */
@@ -283,23 +266,8 @@ function checkLockAndMerge() {
   }
 
   if (pieces.every(p=>p.locked)) {
-    showWin();
-  }
-}
-
-/* ================= WIN POLISH ================= */
-function showWin() {
-  const win = document.getElementById("win");
-  win.classList.add("show");
-  navigator.vibrate?.([100,50,100]);
-
-  for (let i=0;i<40;i++) {
-    const c = document.createElement("div");
-    c.className = "confetti";
-    c.style.left = Math.random()*100 + "vw";
-    c.style.setProperty("--h", Math.random()*360);
-    document.body.appendChild(c);
-    setTimeout(()=>c.remove(),1800);
+    document.getElementById("win").classList.add("show");
+    navigator.vibrate?.([100,50,100]);
   }
 }
 </script>
