@@ -77,28 +77,33 @@ body {
 <div id="win">🎉 Puzzle Tamamlandı!</div>
 
 <script>
-/* ================= AYAR ================= */
-const ROWS = 3;
-const COLS = 5;
-const BUFFER = 1;
-const SNAP_DIST = 0.35;
+/* ===== AYAR ===== */
+var ROWS = 3;
+var COLS = 5;
+var BUFFER = 1;
+var SNAP_DIST = 0.35;
 
-let PW, PH;
-let pieces = [];
-let groups = {};
-let dragging = null;
-let ox = 0, oy = 0;
-let pointerId = null;
+/* ===== STATE ===== */
+var PW, PH;
+var pieces = [];
+var groups = {};
+var dragging = null;
+var pointerId = null;
+var ox = 0, oy = 0;
 
-const board = document.getElementById("board");
-const input = document.getElementById("file");
+/* ===== DOM ===== */
+var board = document.getElementById("board");
+var input = document.getElementById("file");
 
-/* ================= FOTO ================= */
-input.onchange = () => {
-  const f = input.files[0];
+/* ===== FOTO ===== */
+input.onchange = function () {
+  var f = input.files[0];
   if (!f) return;
-  const r = new FileReader();
-  r.onload = e => createPuzzle(e.target.result);
+
+  var r = new FileReader();
+  r.onload = function (e) {
+    createPuzzle(e.target.result);
+  };
   r.readAsDataURL(f);
 };
 
@@ -107,167 +112,205 @@ function createPuzzle(src) {
   pieces = [];
   groups = {};
 
-  const img = new Image();
-  img.onload = () => {
-    const W = Math.floor(innerWidth * 0.95);
-    const H = W * (img.height / img.width);
+  var img = new Image();
+  img.onload = function () {
+    var W = Math.floor(window.innerWidth * 0.95);
+    var H = W * (img.height / img.width);
+
     PW = W / COLS;
     PH = H / ROWS;
 
     board.style.width = W + "px";
     board.style.height = PH * (ROWS + BUFFER) + "px";
 
-    const line = document.createElement("div");
+    var line = document.createElement("div");
     line.className = "buffer-line";
-    line.style.top = PH * ROWS + "px";
+    line.style.top = (PH * ROWS) + "px";
     board.appendChild(line);
 
-    let cells = [];
-    for (let y=0;y<ROWS+BUFFER;y++)
-      for (let x=0;x<COLS;x++)
-        cells.push({x,y});
-    cells.sort(()=>Math.random()-.5);
+    var cells = [];
+    for (var y = 0; y < ROWS + BUFFER; y++) {
+      for (var x = 0; x < COLS; x++) {
+        cells.push({ x: x, y: y });
+      }
+    }
+    cells.sort(function () { return Math.random() - 0.5; });
 
-    let gid = 0;
-    for (let y=0;y<ROWS;y++) {
-      for (let x=0;x<COLS;x++) {
-        const c = cells.pop();
-        const el = document.createElement("div");
+    var gid = 0;
+    for (var ry = 0; ry < ROWS; ry++) {
+      for (var rx = 0; rx < COLS; rx++) {
+        var c = cells.pop();
+
+        var el = document.createElement("div");
         el.className = "piece";
-        el.style.width = PW+"px";
-        el.style.height = PH+"px";
-        el.style.backgroundImage = `url(${src})`;
-        el.style.backgroundSize = `${W}px ${H}px`;
-        el.style.backgroundPosition = `-${x*PW}px -${y*PH}px`;
-        el.style.left = c.x*PW+"px";
-        el.style.top  = c.y*PH+"px";
+        el.style.width = PW + "px";
+        el.style.height = PH + "px";
+        el.style.backgroundImage = "url(" + src + ")";
+        el.style.backgroundSize = W + "px " + H + "px";
+        el.style.backgroundPosition = (-rx * PW) + "px " + (-ry * PH) + "px";
+        el.style.left = (c.x * PW) + "px";
+        el.style.top = (c.y * PH) + "px";
 
         board.appendChild(el);
 
-        const p = {
-          el,
-          cx:x, cy:y,
-          x:c.x, y:c.y,
-          locked:false,
-          gid
+        var p = {
+          el: el,
+          cx: rx,
+          cy: ry,
+          x: c.x,
+          y: c.y,
+          locked: false,
+          gid: gid
         };
 
         pieces.push(p);
         groups[gid] = [p];
         gid++;
 
-        el.onpointerdown = e => startDrag(e,p);
+        el.onpointerdown = function (pp) {
+          return function (e) { startDrag(e, pp); };
+        }(p);
       }
     }
   };
   img.src = src;
 }
 
-/* ================= DRAG ================= */
-function startDrag(e,p) {
-  if (p.locked || pointerId) return;
+/* ===== DRAG ===== */
+function startDrag(e, p) {
+  if (p.locked || pointerId !== null) return;
+
   pointerId = e.pointerId;
   dragging = groups[p.gid];
 
-  const r = p.el.getBoundingClientRect();
+  var r = p.el.getBoundingClientRect();
   ox = e.clientX - r.left;
   oy = e.clientY - r.top;
 
-  dragging.forEach(x=>x.el.classList.add("dragging"));
+  for (var i = 0; i < dragging.length; i++) {
+    dragging[i].el.classList.add("dragging");
+  }
+
   p.el.setPointerCapture(pointerId);
 }
 
-board.onpointermove = e => {
+board.onpointermove = function (e) {
   if (!dragging || e.pointerId !== pointerId) return;
-  dragging.forEach(p=>{
+
+  var base = dragging[0];
+  for (var i = 0; i < dragging.length; i++) {
+    var p = dragging[i];
     p.el.style.left =
-      e.clientX - board.offsetLeft - ox +
-      (p.x-dragging[0].x)*PW + "px";
+      (e.clientX - board.offsetLeft - ox + (p.x - base.x) * PW) + "px";
     p.el.style.top =
-      e.clientY - board.offsetTop - oy +
-      (p.y-dragging[0].y)*PH + "px";
-  });
+      (e.clientY - board.offsetTop - oy + (p.y - base.y) * PH) + "px";
+  }
 };
 
-board.onpointerup = () => drop();
-board.onpointercancel = () => drop();
+board.onpointerup = drop;
+board.onpointercancel = drop;
 
-/* ================= DROP + KAYMA ================= */
+/* ===== DROP + BUFFER KAYMA ===== */
 function drop() {
   if (!dragging) return;
 
-  const base = dragging[0];
-  const rx = base.el.offsetLeft / PW;
-  const ry = base.el.offsetTop  / PH;
-  const tx = Math.round(rx);
-  const ty = Math.round(ry);
+  var base = dragging[0];
+  var rx = base.el.offsetLeft / PW;
+  var ry = base.el.offsetTop / PH;
+  var tx = Math.round(rx);
+  var ty = Math.round(ry);
 
-  if (Math.abs(rx-tx)<SNAP_DIST && Math.abs(ry-ty)<SNAP_DIST) {
-    dragging.forEach(p=>{
-      p.x = tx + (p.x-base.x);
-      p.y = ty + (p.y-base.y);
-    });
+  if (Math.abs(rx - tx) < SNAP_DIST && Math.abs(ry - ty) < SNAP_DIST) {
+    for (var i = 0; i < dragging.length; i++) {
+      dragging[i].x = tx + (dragging[i].x - base.x);
+      dragging[i].y = ty + (dragging[i].y - base.y);
+    }
   }
 
-  // ÇAKIŞMA VARSA → ALTTAKİ PARÇA BUFFER'A
-  dragging.forEach(p=>{
-    pieces.forEach(o=>{
-      if (o === p || o.locked) return;
-      if (o.x === p.x && o.y === p.y) {
-        moveToBuffer(o);
+  // Çakışma → alttaki parça buffer'a
+  for (var i = 0; i < dragging.length; i++) {
+    for (var j = 0; j < pieces.length; j++) {
+      var a = dragging[i];
+      var b = pieces[j];
+      if (a !== b && !b.locked && a.x === b.x && a.y === b.y) {
+        moveToBuffer(b);
       }
-    });
-  });
+    }
+  }
 
-  dragging.forEach(p=>{
-    p.el.style.left = p.x*PW+"px";
-    p.el.style.top  = p.y*PH+"px";
-    p.el.classList.remove("dragging");
-  });
+  for (var k = 0; k < dragging.length; k++) {
+    dragging[k].el.style.left = (dragging[k].x * PW) + "px";
+    dragging[k].el.style.top  = (dragging[k].y * PH) + "px";
+    dragging[k].el.classList.remove("dragging");
+  }
 
-  pointerId = null;
   dragging = null;
+  pointerId = null;
 
   checkLockAndMerge();
 }
 
-/* ================= BUFFER ================= */
-function moveToBuffer(piece) {
-  for (let x=0;x<COLS;x++) {
-    if (!pieces.find(p=>p.x===x && p.y===ROWS)) {
-      piece.x = x;
-      piece.y = ROWS;
+/* ===== BUFFER ===== */
+function moveToBuffer(p) {
+  for (var x = 0; x < COLS; x++) {
+    var free = true;
+    for (var i = 0; i < pieces.length; i++) {
+      if (pieces[i].x === x && pieces[i].y === ROWS) {
+        free = false;
+        break;
+      }
+    }
+    if (free) {
+      p.x = x;
+      p.y = ROWS;
       return;
     }
   }
 }
 
-/* ================= LOCK + MERGE + WIN ================= */
+/* ===== LOCK + MERGE + WIN ===== */
 function checkLockAndMerge() {
-  pieces.forEach(p=>{
-    if (!p.locked && p.x===p.cx && p.y===p.cy) {
+  for (var i = 0; i < pieces.length; i++) {
+    var p = pieces[i];
+    if (!p.locked && p.x === p.cx && p.y === p.cy) {
       p.locked = true;
       p.el.classList.add("locked");
     }
-  });
+  }
 
-  for (let a of pieces) for (let b of pieces) {
-    if (a.gid===b.gid || !a.locked || !b.locked) continue;
-    const right = a.cx+1===b.cx && a.x+1===b.x && a.y===b.y;
-    const down  = a.cy+1===b.cy && a.y+1===b.y && a.x===b.x;
-    if (right || down) {
-      groups[b.gid].forEach(p=>{
-        p.gid = a.gid;
-        groups[a.gid].push(p);
-      });
-      delete groups[b.gid];
-      break;
+  for (var a = 0; a < pieces.length; a++) {
+    for (var b = 0; b < pieces.length; b++) {
+      var pa = pieces[a];
+      var pb = pieces[b];
+      if (pa.gid === pb.gid || !pa.locked || !pb.locked) continue;
+
+      var right = pa.cx + 1 === pb.cx && pa.x + 1 === pb.x && pa.y === pb.y;
+      var down  = pa.cy + 1 === pb.cy && pa.y + 1 === pb.y && pa.x === pb.x;
+
+      if (right || down) {
+        var ga = pa.gid;
+        var gb = pb.gid;
+        for (var i2 = 0; i2 < groups[gb].length; i2++) {
+          groups[gb][i2].gid = ga;
+          groups[ga].push(groups[gb][i2]);
+        }
+        delete groups[gb];
+        break;
+      }
     }
   }
 
-  if (pieces.every(p=>p.locked)) {
-    document.getElementById("win").classList.add("show");
-    navigator.vibrate?.([100,50,100]);
+  var done = true;
+  for (var i3 = 0; i3 < pieces.length; i3++) {
+    if (!pieces[i3].locked) done = false;
+  }
+
+  if (done) {
+    var win = document.getElementById("win");
+    win.classList.add("show");
+    if (navigator.vibrate) {
+      navigator.vibrate([100,50,100]);
+    }
   }
 }
 </script>
