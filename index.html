@@ -5,140 +5,217 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Puzzle</title>
 
+<link rel="manifest" href="manifest.json">
+
 <style>
-body{margin:0;background:#111;color:#fff;font-family:Arial;display:flex;flex-direction:column;align-items:center}
-#top{padding:10px}
-#board{position:relative;background:#000;border:2px solid #333;touch-action:none}
-.piece{position:absolute;background-repeat:no-repeat;border:1px solid #222;transition:left .2s,top .2s}
-.piece.dragging{transition:none;z-index:10}
-.piece.locked{border:none}
-.buffer-line{position:absolute;left:0;right:0;border-top:2px dashed #444}
-#win{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;
-font-size:32px;opacity:0;pointer-events:none;transition:.3s}
-#win.show{opacity:1}
+body {
+  margin: 0;
+  background: #111;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#top { padding: 10px; }
+
+#board {
+  position: relative;
+  background: #000;
+  border: 2px solid #333;
+  touch-action: none;
+}
+
+.piece {
+  position: absolute;
+  border: 1px solid #222;
+  background-repeat: no-repeat;
+  transition: left .2s ease, top .2s ease;
+}
+
+.piece.dragging {
+  transition: none;
+  z-index: 10;
+}
+
+.piece.locked {
+  border: none;
+}
+
+#win {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  opacity: 0;
+  pointer-events: none;
+  transition: .3s;
+}
+
+#win.show { opacity: 1; }
 </style>
 </head>
+
 <body>
 
-<div id="top"><input type="file" id="img" accept="image/*"></div>
+<div id="top">
+  <input type="file" id="file" accept="image/*">
+</div>
+
 <div id="board"></div>
 <div id="win">🎉 Puzzle Tamamlandı!</div>
 
 <script>
-const ROWS=3,COLS=5,BUFFER=1,SNAP=0.35;
-const board=document.getElementById("board");
-const imgInput=document.getElementById("img");
-let PW,PH,pieces=[],groups={},grid=[];
-let dragGroup=null,base=null,ox=0,oy=0,pid=null,done=false;
+const ROWS = 3, COLS = 5;
+let PW, PH;
+let pieces = [];
+let groups = {};
+let dragging = null;
+let ox = 0, oy = 0;
+let pointerId = null;
 
-imgInput.onchange=()=>{const f=imgInput.files[0];if(!f)return;
-const r=new FileReader();r.onload=e=>init(e.target.result);r.readAsDataURL(f)};
+const board = document.getElementById("board");
+const input = document.getElementById("file");
 
-function init(src){
- board.innerHTML="";pieces=[];groups={};done=false;
- const img=new Image();img.onload=()=>{
-  const W=innerWidth*0.95,H=W*(img.height/img.width);
-  PW=W/COLS;PH=H/ROWS;
-  board.style.width=W+"px";board.style.height=PH*(ROWS+BUFFER)+"px";
-  const bl=document.createElement("div");bl.className="buffer-line";bl.style.top=PH*ROWS+"px";board.appendChild(bl);
-  let cells=[];for(let y=0;y<ROWS+BUFFER;y++)for(let x=0;x<COLS;x++)cells.push({x,y});
-  cells.sort(()=>Math.random()-.5);
-  let gid=0;
-  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
-    const c=cells.pop();
-    const el=document.createElement("div");
-    el.className="piece";el.style.width=PW+"px";el.style.height=PH+"px";
-    el.style.backgroundImage=`url(${src})`;
-    el.style.backgroundSize=`${W}px ${H}px`;
-    el.style.backgroundPosition=`-${x*PW}px -${y*PH}px`;
-    board.appendChild(el);
-    const p={el,x,y,gx:c.x,gy:c.y,lock:false,gid};
-    pieces.push(p);groups[gid]=[p];gid++;
-    el.onpointerdown=e=>start(e,p);
+input.onchange = () => {
+  const f = input.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = e => createPuzzle(e.target.result);
+  r.readAsDataURL(f);
+};
+
+function createPuzzle(src) {
+  board.innerHTML = "";
+  pieces = [];
+  groups = {};
+
+  const img = new Image();
+  img.onload = () => {
+    const W = Math.floor(innerWidth * 0.95);
+    const H = W * (img.height / img.width);
+    PW = W / COLS;
+    PH = H / ROWS;
+
+    board.style.width = W + "px";
+    board.style.height = H + "px";
+
+    let cells = [];
+    for (let y=0;y<ROWS;y++)
+      for (let x=0;x<COLS;x++)
+        cells.push({x,y});
+    cells.sort(()=>Math.random()-.5);
+
+    let gid = 0;
+    for (let y=0;y<ROWS;y++) {
+      for (let x=0;x<COLS;x++) {
+        const c = cells.pop();
+        const el = document.createElement("div");
+        el.className = "piece";
+        el.style.width = PW+"px";
+        el.style.height = PH+"px";
+        el.style.backgroundImage = `url(${src})`;
+        el.style.backgroundSize = `${W}px ${H}px`;
+        el.style.backgroundPosition = `-${x*PW}px -${y*PH}px`;
+        el.style.left = c.x*PW+"px";
+        el.style.top  = c.y*PH+"px";
+
+        board.appendChild(el);
+
+        const p = {
+          el,
+          cx:x, cy:y,
+          x:c.x, y:c.y,
+          locked:false,
+          gid
+        };
+
+        pieces.push(p);
+        groups[gid] = [p];
+        gid++;
+
+        el.onpointerdown = e => startDrag(e,p);
+      }
+    }
+  };
+  img.src = src;
+}
+
+function startDrag(e,p) {
+  if (p.locked || pointerId) return;
+  pointerId = e.pointerId;
+  dragging = groups[p.gid];
+  const r = p.el.getBoundingClientRect();
+  ox = e.clientX - r.left;
+  oy = e.clientY - r.top;
+  dragging.forEach(x=>x.el.classList.add("dragging"));
+  p.el.setPointerCapture(pointerId);
+}
+
+board.onpointermove = e => {
+  if (!dragging || e.pointerId !== pointerId) return;
+  dragging.forEach(p=>{
+    p.el.style.left = e.clientX - board.offsetLeft - ox + (p.x-dragging[0].x)*PW + "px";
+    p.el.style.top  = e.clientY - board.offsetTop  - oy + (p.y-dragging[0].y)*PH + "px";
+  });
+};
+
+board.onpointerup = () => drop();
+board.onpointercancel = () => drop();
+
+function drop() {
+  if (!dragging) return;
+
+  const base = dragging[0];
+  const nx = Math.round(base.el.offsetLeft / PW);
+  const ny = Math.round(base.el.offsetTop  / PH);
+
+  dragging.forEach(p=>{
+    p.x = nx + (p.x-base.x);
+    p.y = ny + (p.y-base.y);
+    p.el.style.left = p.x*PW+"px";
+    p.el.style.top  = p.y*PH+"px";
+    p.el.classList.remove("dragging");
+  });
+
+  pointerId = null;
+  dragging = null;
+
+  checkLockAndMerge();
+}
+
+function checkLockAndMerge() {
+  pieces.forEach(p=>{
+    if (!p.locked && p.x===p.cx && p.y===p.cy) {
+      p.locked = true;
+      p.el.classList.add("locked");
+    }
+  });
+
+  for (let a of pieces) for (let b of pieces) {
+    if (a.gid===b.gid || !a.locked || !b.locked) continue;
+    const right = a.cx+1===b.cx && a.x+1===b.x && a.y===b.y;
+    const down  = a.cy+1===b.cy && a.y+1===b.y && a.x===b.x;
+    if (right || down) {
+      groups[b.gid].forEach(p=>{
+        p.gid = a.gid;
+        groups[a.gid].push(p);
+      });
+      delete groups[b.gid];
+      break;
+    }
   }
-  rebuild();draw();
- };
- img.src=src;
- board.onpointermove=move;board.onpointerup=drop;board.onpointercancel=drop;
-}
 
-function rebuild(ignore){
- grid=Array.from({length:ROWS+BUFFER},()=>Array(COLS).fill(null));
- pieces.forEach(p=>{
-  if(ignore&&p.gid===ignore)return;
-  if(grid[p.gy]&&grid[p.gy][p.gx]==null)grid[p.gy][p.gx]=p;
- });
-}
-
-function start(e,p){
- if(p.lock||pid)return;
- pid=e.pointerId;base=p;dragGroup=groups[p.gid];
- const r=p.el.getBoundingClientRect();ox=e.clientX-r.left;oy=e.clientY-r.top;
- dragGroup.forEach(x=>x.el.classList.add("dragging"));
- p.el.setPointerCapture(pid);
-}
-
-function move(e){
- if(!dragGroup||e.pointerId!==pid)return;
- dragGroup.forEach(p=>{
-  p.el.style.left=e.clientX-board.offsetLeft-ox+(p.gx-base.gx)*PW+"px";
-  p.el.style.top =e.clientY-board.offsetTop -oy+(p.gy-base.gy)*PH+"px";
- });
-}
-
-function drop(){
- if(!dragGroup)return;
- snap();
- dragGroup.forEach(p=>p.el.classList.remove("dragging"));
- rebuild(dragGroup[0].gid);
- resolve();
- lockMergeWin();
- dragGroup=null;base=null;pid=null;
-}
-
-function snap(){
- const rx=base.el.offsetLeft/PW, ry=base.el.offsetTop/PH;
- const tx=Math.round(rx), ty=Math.round(ry);
- if(Math.abs(rx-tx)>SNAP||Math.abs(ry-ty)>SNAP||tx<0||tx>=COLS||ty<0||ty>=ROWS)return;
- dragGroup.forEach(p=>{p.gx=tx+(p.gx-base.gx);p.gy=ty+(p.gy-base.gy)});
-}
-
-function resolve(){
- dragGroup.forEach(p=>{
-  if(grid[p.gy][p.gx]){
-    const s=findEmpty(p.gx,p.gy);
-    p.gx=s.x;p.gy=s.y;
+  if (pieces.every(p=>p.locked)) {
+    document.getElementById("win").classList.add("show");
+    navigator.vibrate?.([100,50,100]);
   }
- });
- rebuild();draw();
 }
-
-function findEmpty(x,y){
- const q=[[x,y]],seen=new Set([x+","+y]),maxY=ROWS+BUFFER-1;
- const d=[[1,0],[-1,0],[0,1],[0,-1]];
- while(q.length){
-  const[cx,cy]=q.shift();
-  for(const[dx,dy]of d){
-   const nx=cx+dx,ny=cy+dy,k=nx+","+ny;
-   if(nx<0||nx>=COLS||ny<0||ny>maxY||seen.has(k))continue;
-   if(!grid[ny][nx])return{x:nx,y:ny};
-   seen.add(k);q.push([nx,ny]);
-  }
- }
- return{x,y:maxY};
-}
-
-function lockMergeWin(){
- pieces.forEach(p=>{if(!p.lock&&p.gx===p.x&&p.gy===p.y){p.lock=true;p.el.classList.add("locked")}});
- for(let a of pieces)for(let b of pieces){
-  if(a.gid===b.gid||!a.lock||!b.lock)continue;
-  const ok=(a.x+1===b.x&&a.gx+1===b.gx&&a.gy===b.gy)||(a.y+1===b.y&&a.gy+1===b.gy&&a.gx===b.gx);
-  if(ok){groups[b.gid].forEach(p=>{p.gid=a.gid;groups[a.gid].push(p)});delete groups[b.gid];return;}
- }
- if(!done&&pieces.every(p=>p.lock)){done=true;document.getElementById("win").classList.add("show");navigator.vibrate?.([100,50,100]);}
-}
-
-function draw(){pieces.forEach(p=>{p.el.style.left=p.gx*PW+"px";p.el.style.top=p.gy*PH+"px"})}
 </script>
+
 </body>
 </html>
