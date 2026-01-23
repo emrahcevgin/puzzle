@@ -237,7 +237,7 @@ function stopDrag() {
   checkLockMergeAndWin();
 }
 
-/* ===== SNAP + YERLEŞTİR ===== */
+/* ===== SNAP + ÇAKIŞMA ÇÖZÜMÜ ===== */
 function placeGroup(group) {
   const base = group[0];
 
@@ -261,14 +261,47 @@ function placeGroup(group) {
       p.gridX = tx + (p.correctX - base.correctX);
       p.gridY = ty + (p.correctY - base.correctY);
     }
+  });
+
+  // ÇAKIŞMA VAR MI?
+  group.forEach(p => {
+    const other = pieceAt(p.gridX, p.gridY, p);
+    if (other && !other.locked) {
+      moveToNearestEmpty(other);
+    }
+  });
+
+  group.forEach(p => {
     p.el.style.left = p.gridX * PW + "px";
     p.el.style.top  = p.gridY * PH + "px";
   });
 }
 
+/* ===== BOŞ YER BUL ===== */
+function moveToNearestEmpty(piece) {
+  const maxY = ROWS + BUFFER - 1;
+
+  for (let r = 1; r <= COLS + maxY; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        const nx = piece.gridX + dx;
+        const ny = piece.gridY + dy;
+
+        if (nx < 0 || nx >= COLS) continue;
+        if (ny < 0 || ny > maxY) continue;
+
+        if (!pieceAt(nx, ny)) {
+          piece.gridX = nx;
+          piece.gridY = ny;
+          return;
+        }
+      }
+    }
+  }
+}
+
 /* ===== KİLİT + BİRLEŞME + KAZANMA ===== */
 function checkLockMergeAndWin() {
-  // Kilitle
   pieces.forEach(p => {
     if (!p.locked &&
         p.gridX === p.correctX &&
@@ -278,7 +311,6 @@ function checkLockMergeAndWin() {
     }
   });
 
-  // Birleştir
   for (let a of pieces) {
     for (let b of pieces) {
       if (a.groupId === b.groupId) continue;
@@ -301,7 +333,6 @@ function checkLockMergeAndWin() {
     }
   }
 
-  // Kazanma
   if (!finished && pieces.every(
     p => p.locked &&
          p.gridX === p.correctX &&
@@ -320,6 +351,15 @@ function mergeGroups(g1, g2) {
     A.push(p);
   });
   delete groups[g2];
+}
+
+/* ===== HELPER ===== */
+function pieceAt(x, y, ignore) {
+  return pieces.find(p =>
+    p.gridX === x &&
+    p.gridY === y &&
+    p !== ignore
+  );
 }
 
 /* ===== BİTİŞ ===== */
