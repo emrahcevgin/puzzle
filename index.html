@@ -53,10 +53,28 @@ body {
   font-size: 32px;
   opacity: 0;
   pointer-events: none;
-  transition: .3s;
+  transition: opacity .4s ease;
 }
 
-#win.show { opacity: 1; }
+#win.show {
+  opacity: 1;
+}
+
+.confetti {
+  position: fixed;
+  width: 8px;
+  height: 14px;
+  background: hsl(var(--h),90%,60%);
+  top: -20px;
+  animation: fall 1.8s linear forwards;
+}
+
+@keyframes fall {
+  to {
+    transform: translateY(110vh) rotate(360deg);
+    opacity: 0;
+  }
+}
 </style>
 </head>
 
@@ -70,7 +88,11 @@ body {
 <div id="win">🎉 Puzzle Tamamlandı!</div>
 
 <script>
+/* ================= AYAR ================= */
 const ROWS = 3, COLS = 5;
+const SNAP_DIST = 0.35;      // yumuşak snap
+const MAGNET_DIST = 0.25;    // manyetik kenar
+
 let PW, PH;
 let pieces = [];
 let groups = {};
@@ -81,6 +103,7 @@ let pointerId = null;
 const board = document.getElementById("board");
 const input = document.getElementById("file");
 
+/* ================= FOTO ================= */
 input.onchange = () => {
   const f = input.files[0];
   if (!f) return;
@@ -145,13 +168,16 @@ function createPuzzle(src) {
   img.src = src;
 }
 
+/* ================= DRAG ================= */
 function startDrag(e,p) {
   if (p.locked || pointerId) return;
   pointerId = e.pointerId;
   dragging = groups[p.gid];
+
   const r = p.el.getBoundingClientRect();
   ox = e.clientX - r.left;
   oy = e.clientY - r.top;
+
   dragging.forEach(x=>x.el.classList.add("dragging"));
   p.el.setPointerCapture(pointerId);
 }
@@ -159,24 +185,39 @@ function startDrag(e,p) {
 board.onpointermove = e => {
   if (!dragging || e.pointerId !== pointerId) return;
   dragging.forEach(p=>{
-    p.el.style.left = e.clientX - board.offsetLeft - ox + (p.x-dragging[0].x)*PW + "px";
-    p.el.style.top  = e.clientY - board.offsetTop  - oy + (p.y-dragging[0].y)*PH + "px";
+    p.el.style.left =
+      e.clientX - board.offsetLeft - ox +
+      (p.x-dragging[0].x)*PW + "px";
+    p.el.style.top =
+      e.clientY - board.offsetTop - oy +
+      (p.y-dragging[0].y)*PH + "px";
   });
 };
 
 board.onpointerup = () => drop();
 board.onpointercancel = () => drop();
 
+/* ================= DROP ================= */
 function drop() {
   if (!dragging) return;
 
   const base = dragging[0];
-  const nx = Math.round(base.el.offsetLeft / PW);
-  const ny = Math.round(base.el.offsetTop  / PH);
+  const rx = base.el.offsetLeft / PW;
+  const ry = base.el.offsetTop  / PH;
+
+  const tx = Math.round(rx);
+  const ty = Math.round(ry);
+
+  if (Math.abs(rx-tx) < SNAP_DIST && Math.abs(ry-ty) < SNAP_DIST) {
+    dragging.forEach(p=>{
+      p.x = tx + (p.x-base.x);
+      p.y = ty + (p.y-base.y);
+    });
+  }
+
+  applyMagnetism(dragging);
 
   dragging.forEach(p=>{
-    p.x = nx + (p.x-base.x);
-    p.y = ny + (p.y-base.y);
     p.el.style.left = p.x*PW+"px";
     p.el.style.top  = p.y*PH+"px";
     p.el.classList.remove("dragging");
@@ -188,6 +229,37 @@ function drop() {
   checkLockAndMerge();
 }
 
+/* ================= MANYETİK KENAR ================= */
+function applyMagnetism(group) {
+  group.forEach(p=>{
+    pieces.forEach(o=>{
+      if (!o.locked || o.gid === p.gid) return;
+
+      const dx = o.x - p.x;
+      const dy = o.y - p.y;
+
+      // sağ-sol komşu
+      if (dy === 0 && Math.abs(dx) === 1) {
+        if (Math.abs(p.el.offsetLeft - o.el.offsetLeft + dx*PW) < PW*MAGNET_DIST) {
+          group.forEach(g=>{
+            g.x += dx;
+          });
+        }
+      }
+
+      // alt-üst komşu
+      if (dx === 0 && Math.abs(dy) === 1) {
+        if (Math.abs(p.el.offsetTop - o.el.offsetTop + dy*PH) < PH*MAGNET_DIST) {
+          group.forEach(g=>{
+            g.y += dy;
+          });
+        }
+      }
+    });
+  });
+}
+
+/* ================= LOCK + MERGE + WIN ================= */
 function checkLockAndMerge() {
   pieces.forEach(p=>{
     if (!p.locked && p.x===p.cx && p.y===p.cy) {
@@ -211,8 +283,23 @@ function checkLockAndMerge() {
   }
 
   if (pieces.every(p=>p.locked)) {
-    document.getElementById("win").classList.add("show");
-    navigator.vibrate?.([100,50,100]);
+    showWin();
+  }
+}
+
+/* ================= WIN POLISH ================= */
+function showWin() {
+  const win = document.getElementById("win");
+  win.classList.add("show");
+  navigator.vibrate?.([100,50,100]);
+
+  for (let i=0;i<40;i++) {
+    const c = document.createElement("div");
+    c.className = "confetti";
+    c.style.left = Math.random()*100 + "vw";
+    c.style.setProperty("--h", Math.random()*360);
+    document.body.appendChild(c);
+    setTimeout(()=>c.remove(),1800);
   }
 }
 </script>
