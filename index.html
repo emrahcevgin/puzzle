@@ -66,7 +66,10 @@ body {
   transition: opacity .4s ease, transform .4s ease;
   z-index: 999;
 }
-#winOverlay.show { opacity:1; transform:scale(1); }
+#winOverlay.show {
+  opacity: 1;
+  transform: scale(1);
+}
 </style>
 </head>
 
@@ -80,17 +83,17 @@ body {
 <div id="winOverlay">🎉 Puzzle Tamamlandı!</div>
 
 <script>
-/* ===================== AYAR ===================== */
+/* ================= AYAR ================= */
 const ROWS = 3;
 const COLS = 5;
 const BUFFER = 1;
 const SNAP_THRESHOLD = 0.35;
 
-/* ===================== DOM ===================== */
+/* ================= DOM ================= */
 const board = document.getElementById("board");
 const input = document.getElementById("imageInput");
 
-/* ===================== STATE ===================== */
+/* ================= STATE ================= */
 let PW, PH;
 let pieces = [];
 let groups = {};
@@ -101,13 +104,13 @@ let offsetY = 0;
 let activePointerId = null;
 let finished = false;
 
-/* ===================== FOTO ===================== */
+/* ================= FOTO ================= */
 input.onchange = () => {
-  const f = input.files[0];
-  if (!f) return;
-  const r = new FileReader();
-  r.onload = e => buildPuzzle(e.target.result);
-  r.readAsDataURL(f);
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => buildPuzzle(e.target.result);
+  reader.readAsDataURL(file);
 };
 
 function buildPuzzle(src) {
@@ -116,7 +119,7 @@ function buildPuzzle(src) {
   img.src = src;
 }
 
-/* ===================== SETUP ===================== */
+/* ================= SETUP ================= */
 function setup(img, src) {
   board.innerHTML = "";
   pieces = [];
@@ -148,8 +151,8 @@ function setup(img, src) {
       const c = cells.pop();
       const el = document.createElement("div");
       el.className = "piece";
-      el.style.width = PW+"px";
-      el.style.height = PH+"px";
+      el.style.width = PW + "px";
+      el.style.height = PH + "px";
       el.style.backgroundImage = `url(${src})`;
       el.style.backgroundSize = `${W}px ${H}px`;
       el.style.backgroundPosition = `-${x*PW}px -${y*PH}px`;
@@ -157,145 +160,182 @@ function setup(img, src) {
 
       const p = {
         el,
-        correctX:x, correctY:y,
-        gridX:c.x, gridY:c.y,
-        locked:false,
-        groupId:gid
+        correctX: x,
+        correctY: y,
+        gridX: c.x,
+        gridY: c.y,
+        locked: false,
+        groupId: gid
       };
+
       pieces.push(p);
       groups[gid] = [p];
       gid++;
 
-      el.addEventListener("pointerdown", e => startDrag(e,p));
+      el.addEventListener("pointerdown", e => startDrag(e, p));
     }
   }
+
   rebuildGrid();
   render();
+
   board.onpointermove = onDrag;
   board.onpointerup = stopDrag;
   board.onpointercancel = stopDrag;
 }
 
-/* ===================== GRID ===================== */
+/* ================= GRID ================= */
 function rebuildGrid() {
-  grid = Array.from({length:ROWS+BUFFER},()=>Array(COLS).fill(null));
-  pieces.forEach(p => {
-    if (grid[p.gridY] && grid[p.gridY][p.gridX] === null)
+  grid = Array.from(
+    { length: ROWS + BUFFER },
+    () => Array(COLS).fill(null)
+  );
+
+  // Önce kilitli parçalar
+  pieces.filter(p => p.locked).forEach(p => {
+    grid[p.gridY][p.gridX] = p;
+  });
+
+  // Sonra kilitli olmayanlar
+  pieces.filter(p => !p.locked).forEach(p => {
+    if (grid[p.gridY][p.gridX] === null) {
       grid[p.gridY][p.gridX] = p;
+    }
   });
 }
 
-/* ===================== DRAG ===================== */
-function startDrag(e,p) {
+/* ================= DRAG ================= */
+function startDrag(e, p) {
   if (p.locked || activePointerId) return;
+
   activePointerId = e.pointerId;
   p.el.setPointerCapture(e.pointerId);
   dragGroup = groups[p.groupId];
+
   const r = p.el.getBoundingClientRect();
   offsetX = e.clientX - r.left;
   offsetY = e.clientY - r.top;
-  dragGroup.forEach(x=>x.el.classList.add("dragging"));
+
+  dragGroup.forEach(x => x.el.classList.add("dragging"));
 }
 
 function onDrag(e) {
-  if (!dragGroup || e.pointerId!==activePointerId) return;
-  dragGroup.forEach(p=>{
-    const dx = (p.correctX-dragGroup[0].correctX)*PW;
-    const dy = (p.correctY-dragGroup[0].correctY)*PH;
-    p.el.style.left = e.clientX - board.offsetLeft - offsetX + dx + "px";
-    p.el.style.top  = e.clientY - board.offsetTop  - offsetY + dy + "px";
+  if (!dragGroup || e.pointerId !== activePointerId) return;
+
+  dragGroup.forEach(p => {
+    const dx = (p.correctX - dragGroup[0].correctX) * PW;
+    const dy = (p.correctY - dragGroup[0].correctY) * PH;
+    p.el.style.left =
+      e.clientX - board.offsetLeft - offsetX + dx + "px";
+    p.el.style.top =
+      e.clientY - board.offsetTop - offsetY + dy + "px";
   });
 }
 
 function stopDrag() {
   if (!dragGroup) return;
+
   snapGroup(dragGroup);
-  dragGroup.forEach(p=>p.el.classList.remove("dragging"));
+  dragGroup.forEach(p => p.el.classList.remove("dragging"));
   dragGroup = null;
   activePointerId = null;
+
   resolveCollisions();
-  lockMergeWin();
+  lockMergeAndWin();
 }
 
-/* ===================== SNAP ===================== */
-function snapGroup(g) {
-  const b = g[0];
+/* ================= SNAP ================= */
+function snapGroup(group) {
+  const b = group[0];
   const rx = b.el.offsetLeft / PW;
   const ry = b.el.offsetTop / PH;
   const tx = Math.round(rx);
   const ty = Math.round(ry);
 
-  const ok = Math.abs(rx-tx)<SNAP_THRESHOLD &&
-             Math.abs(ry-ty)<SNAP_THRESHOLD &&
-             tx>=0 && tx<COLS && ty>=0 && ty<ROWS;
+  const ok =
+    Math.abs(rx - tx) < SNAP_THRESHOLD &&
+    Math.abs(ry - ty) < SNAP_THRESHOLD &&
+    tx >= 0 && tx < COLS &&
+    ty >= 0 && ty < ROWS;
 
   if (!ok) return;
 
-  g.forEach(p=>{
-    p.gridX = tx + (p.correctX-b.correctX);
-    p.gridY = ty + (p.correctY-b.correctY);
+  group.forEach(p => {
+    p.gridX = tx + (p.correctX - b.correctX);
+    p.gridY = ty + (p.correctY - b.correctY);
   });
 }
 
-/* ===================== COLLISION (BFS) ===================== */
+/* ================= COLLISION (BFS) ================= */
 function resolveCollisions() {
   rebuildGrid();
-  pieces.forEach(p=>{
+
+  pieces.forEach(p => {
     if (p.locked) return;
+
     if (grid[p.gridY][p.gridX] !== p) {
-      const spot = bfsEmpty(p.gridX,p.gridY);
+      const spot = bfsEmpty(p.gridX, p.gridY);
       p.gridX = spot.x;
       p.gridY = spot.y;
       rebuildGrid();
     }
   });
+
   render();
 }
 
-function bfsEmpty(x,y) {
-  const q=[[x,y]];
-  const seen=new Set([x+","+y]);
-  const maxY = ROWS+BUFFER-1;
+function bfsEmpty(x, y) {
+  const q = [[x, y]];
+  const seen = new Set([`${x},${y}`]);
+  const maxY = ROWS + BUFFER - 1;
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
 
-  while(q.length){
-    const [cx,cy]=q.shift();
-    const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
-    for(const[dX,dY]of dirs){
-      const nx=cx+dX, ny=cy+dY;
-      const k=nx+","+ny;
-      if(nx<0||nx>=COLS||ny<0||ny>maxY||seen.has(k))continue;
-      if(!grid[ny][nx]) return {x:nx,y:ny};
-      seen.add(k);
-      q.push([nx,ny]);
+  while (q.length) {
+    const [cx, cy] = q.shift();
+    for (const [dx, dy] of dirs) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      const key = `${nx},${ny}`;
+      if (nx < 0 || nx >= COLS || ny < 0 || ny > maxY) continue;
+      if (seen.has(key)) continue;
+      if (!grid[ny][nx]) return { x: nx, y: ny };
+      seen.add(key);
+      q.push([nx, ny]);
     }
   }
-  return {x, y:maxY};
+
+  return { x, y: maxY };
 }
 
-/* ===================== LOCK + MERGE + WIN ===================== */
-function lockMergeWin() {
-  pieces.forEach(p=>{
-    if(!p.locked && p.gridX===p.correctX && p.gridY===p.correctY){
-      p.locked=true;
+/* ================= LOCK + MERGE + WIN ================= */
+function lockMergeAndWin() {
+  pieces.forEach(p => {
+    if (!p.locked &&
+        p.gridX === p.correctX &&
+        p.gridY === p.correctY) {
+      p.locked = true;
       p.el.classList.add("locked");
     }
   });
 
-  for(let a of pieces){
-    for(let b of pieces){
-      if(a.groupId===b.groupId)continue;
-      if(!a.locked||!b.locked)continue;
+  for (let a of pieces) {
+    for (let b of pieces) {
+      if (a.groupId === b.groupId) continue;
+      if (!a.locked || !b.locked) continue;
 
-      const right=a.correctX+1===b.correctX &&
-                  a.gridX+1===b.gridX &&
-                  a.gridY===b.gridY;
-      const down=a.correctY+1===b.correctY &&
-                 a.gridY+1===b.gridY &&
-                 a.gridX===b.gridX;
+      const right =
+        a.correctX + 1 === b.correctX &&
+        a.gridX + 1 === b.gridX &&
+        a.gridY === b.gridY;
 
-      if(right||down){
-        groups[b.groupId].forEach(p=>{
-          p.groupId=a.groupId;
+      const down =
+        a.correctY + 1 === b.correctY &&
+        a.gridY + 1 === b.gridY &&
+        a.gridX === b.gridX;
+
+      if (right || down) {
+        groups[b.groupId].forEach(p => {
+          p.groupId = a.groupId;
           groups[a.groupId].push(p);
         });
         delete groups[b.groupId];
@@ -304,27 +344,28 @@ function lockMergeWin() {
     }
   }
 
-  if(!finished && pieces.every(p=>p.locked)){
-    finished=true;
+  if (!finished && pieces.every(p => p.locked)) {
+    finished = true;
     win();
   }
 }
 
-/* ===================== RENDER ===================== */
-function render(){
-  pieces.forEach(p=>{
-    p.el.style.left = p.gridX*PW+"px";
-    p.el.style.top  = p.gridY*PH+"px";
+/* ================= RENDER ================= */
+function render() {
+  pieces.forEach(p => {
+    p.el.style.left = p.gridX * PW + "px";
+    p.el.style.top  = p.gridY * PH + "px";
   });
 }
 
-/* ===================== WIN ===================== */
-function win(){
-  const o=document.getElementById("winOverlay");
+/* ================= WIN ================= */
+function win() {
+  const o = document.getElementById("winOverlay");
   o.classList.add("show");
-  navigator.vibrate?.([100,50,100]);
-  setTimeout(()=>o.classList.remove("show"),1500);
+  navigator.vibrate?.([100, 50, 100]);
+  setTimeout(() => o.classList.remove("show"), 1500);
 }
 </script>
+
 </body>
 </html>
