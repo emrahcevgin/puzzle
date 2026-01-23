@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v8"; // 👈 HER GÜNCELLEMEDE BUNU DEĞİŞTİR
+const CACHE_VERSION = "v9"; // 👈 HER GÜNCELLEMEDE BUNU DEĞİŞTİR
 const CACHE_NAME = "puzzle-cache-" + CACHE_VERSION;
 
 const FILES_TO_CACHE = [
@@ -42,5 +42,6 @@ self.addEventListener("fetch", event => {
       .catch(() => caches.match(event.request))
   );
 });
+
 
 
