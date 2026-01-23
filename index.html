@@ -56,174 +56,245 @@ body {
 <div id="top">
   <input type="file" id="file" accept="image/*">
 </div>
+
 <div id="board"></div>
 <div id="win">🎉 Puzzle Tamamlandı!</div>
 
 <script>
-var ROWS=3, COLS=5;
-var PW, PH;
-var pieces=[], groups={};
-var dragging=null, pointerId=null, ox=0, oy=0;
-var board=document.getElementById("board");
-var input=document.getElementById("file");
+/* ==== AYAR ==== */
+var ROWS = 3;
+var COLS = 5;
+var BUFFER = 1;
 
-/* ===== FOTO ===== */
-input.onchange=function(){
-  var f=input.files[0];
-  if(!f) return;
-  var r=new FileReader();
-  r.onload=function(e){ init(e.target.result); };
+var PW, PH;
+var pieces = [];
+var groups = {};
+var dragging = null;
+var pointerId = null;
+var ox = 0, oy = 0;
+
+var board = document.getElementById("board");
+var input = document.getElementById("file");
+
+/* ==== FOTO ==== */
+input.onchange = function () {
+  var f = input.files[0];
+  if (!f) return;
+  var r = new FileReader();
+  r.onload = function (e) {
+    init(e.target.result);
+  };
   r.readAsDataURL(f);
 };
 
-function init(src){
-  board.innerHTML="";
-  pieces=[]; groups={};
+function init(src) {
+  board.innerHTML = "";
+  pieces = [];
+  groups = {};
 
-  var img=new Image();
-  img.onload=function(){
-    var W=Math.floor(innerWidth*0.95);
-    var H=W*(img.height/img.width);
-    PW=W/COLS; PH=H/ROWS;
+  var img = new Image();
+  img.onload = function () {
+    var W = Math.floor(window.innerWidth * 0.95);
+    var H = W * (img.height / img.width);
+    PW = W / COLS;
+    PH = H / ROWS;
 
-    board.style.width=W+"px";
-    board.style.height=PH*(ROWS+1)+"px";
+    board.style.width = W + "px";
+    board.style.height = PH * (ROWS + BUFFER) + "px";
 
-    var bl=document.createElement("div");
-    bl.className="buffer-line";
-    bl.style.top=(PH*ROWS)+"px";
+    var bl = document.createElement("div");
+    bl.className = "buffer-line";
+    bl.style.top = (PH * ROWS) + "px";
     board.appendChild(bl);
 
-    var cells=[];
-    for(var y=0;y<ROWS+1;y++)
-      for(var x=0;x<COLS;x++)
-        cells.push({x:x,y:y});
-    cells.sort(()=>Math.random()-0.5);
+    var cells = [];
+    for (var y = 0; y < ROWS + BUFFER; y++)
+      for (var x = 0; x < COLS; x++)
+        cells.push({ x: x, y: y });
+    cells.sort(function () { return Math.random() - 0.5; });
 
-    var gid=0;
-    for(var y=0;y<ROWS;y++){
-      for(var x=0;x<COLS;x++){
-        var c=cells.pop();
-        var el=document.createElement("div");
-        el.className="piece";
-        el.style.width=PW+"px";
-        el.style.height=PH+"px";
-        el.style.backgroundImage="url("+src+")";
-        el.style.backgroundSize=W+"px "+H+"px";
-        el.style.backgroundPosition=(-x*PW)+"px "+(-y*PH)+"px";
-        el.style.left=(c.x*PW)+"px";
-        el.style.top =(c.y*PH)+"px";
+    var gid = 0;
+    for (var ry = 0; ry < ROWS; ry++) {
+      for (var rx = 0; rx < COLS; rx++) {
+        var c = cells.pop();
+        var el = document.createElement("div");
+        el.className = "piece";
+        el.style.width = PW + "px";
+        el.style.height = PH + "px";
+        el.style.backgroundImage = "url(" + src + ")";
+        el.style.backgroundSize = W + "px " + H + "px";
+        el.style.backgroundPosition =
+          (-rx * PW) + "px " + (-ry * PH) + "px";
+        el.style.left = (c.x * PW) + "px";
+        el.style.top  = (c.y * PH) + "px";
         board.appendChild(el);
 
-        var p={el:el,cx:x,cy:y,x:c.x,y:c.y,locked:false,gid:gid};
-        pieces.push(p); groups[gid]=[p]; gid++;
+        var p = {
+          el: el,
+          cx: rx, cy: ry,
+          x: c.x, y: c.y,
+          locked: false,
+          gid: gid
+        };
 
-        el.onpointerdown=(function(pp){
-          return function(e){ startDrag(e,pp); };
+        pieces.push(p);
+        groups[gid] = [p];
+        gid++;
+
+        el.onpointerdown = (function (pp) {
+          return function (e) { startDrag(e, pp); };
         })(p);
       }
     }
   };
-  img.src=src;
+  img.src = src;
 }
 
-/* ===== DRAG ===== */
-function startDrag(e,p){
-  if(p.locked||pointerId) return;
-  pointerId=e.pointerId;
-  dragging=groups[p.gid];
-  var r=p.el.getBoundingClientRect();
-  ox=e.clientX-r.left; oy=e.clientY-r.top;
-  dragging.forEach(q=>q.el.classList.add("dragging"));
+/* ==== DRAG ==== */
+function startDrag(e, p) {
+  if (p.locked || pointerId !== null) return;
+  pointerId = e.pointerId;
+  dragging = groups[p.gid];
+
+  var r = p.el.getBoundingClientRect();
+  ox = e.clientX - r.left;
+  oy = e.clientY - r.top;
+
+  dragging.forEach(function (q) {
+    q.el.classList.add("dragging");
+  });
+
   p.el.setPointerCapture(pointerId);
 }
 
-board.onpointermove=function(e){
-  if(!dragging||e.pointerId!==pointerId) return;
-  var base=dragging[0];
-  dragging.forEach(p=>{
-    p.el.style.left=
-      e.clientX-board.offsetLeft-ox+(p.x-base.x)*PW+"px";
+board.onpointermove = function (e) {
+  if (!dragging || e.pointerId !== pointerId) return;
+  var base = dragging[0];
+  dragging.forEach(function (p) {
+    p.el.style.left =
+      (e.clientX - board.offsetLeft - ox +
+      (p.x - base.x) * PW) + "px";
     p.el.style.top =
-      e.clientY-board.offsetTop -oy+(p.y-base.y)*PH+"px";
+      (e.clientY - board.offsetTop - oy +
+      (p.y - base.y) * PH) + "px";
   });
 };
 
-board.onpointerup=drop;
-board.onpointercancel=drop;
+board.onpointerup = drop;
+board.onpointercancel = drop;
 
-/* ===== DROP + BUFFER KAYMA ===== */
-function drop(){
-  if(!dragging) return;
-  var base=dragging[0];
-  var nx=Math.round(base.el.offsetLeft/PW);
-  var ny=Math.round(base.el.offsetTop /PH);
+/* ==== DROP + GERÇEK KAYMA ==== */
+function drop() {
+  if (!dragging) return;
 
-  dragging.forEach(p=>{
-    p.x=nx+(p.x-base.x);
-    p.y=ny+(p.y-base.y);
+  var base = dragging[0];
+  var nx = Math.round(base.el.offsetLeft / PW);
+  var ny = Math.round(base.el.offsetTop  / PH);
+
+  // Yeni grid konumları
+  dragging.forEach(function (p) {
+    p.x = nx + (p.x - base.x);
+    p.y = ny + (p.y - base.y);
   });
 
-  // ÇAKIŞMA VARSA → ALTTAKİ PARÇA BUFFER'A
-  dragging.forEach(a=>{
-    pieces.forEach(b=>{
-      if(a!==b && !b.locked && a.x===b.x && a.y===b.y){
-        moveToBuffer(b);
-      }
-    });
+  // === GRID DOLULUK HARİTASI ===
+  var grid = [];
+  for (var y = 0; y < ROWS + BUFFER; y++) {
+    grid[y] = [];
+    for (var x = 0; x < COLS; x++) grid[y][x] = null;
+  }
+
+  // Drag edilen grup hariç grid'i doldur
+  pieces.forEach(function (p) {
+    if (dragging.indexOf(p) !== -1) return;
+    if (p.y >= 0 && p.y < ROWS + BUFFER &&
+        p.x >= 0 && p.x < COLS) {
+      grid[p.y][p.x] = p;
+    }
   });
 
-  dragging.forEach(p=>{
-    p.el.style.left=(p.x*PW)+"px";
-    p.el.style.top =(p.y*PH)+"px";
+  // ÇAKIŞMA VARSA → ALTTAKİ PARÇAYI TAŞI
+  dragging.forEach(function (p) {
+    if (grid[p.y] && grid[p.y][p.x]) {
+      moveOccupied(grid[p.y][p.x], grid);
+    }
+    grid[p.y][p.x] = p;
+  });
+
+  dragging.forEach(function (p) {
+    p.el.style.left = (p.x * PW) + "px";
+    p.el.style.top  = (p.y * PH) + "px";
     p.el.classList.remove("dragging");
   });
 
-  dragging=null; pointerId=null;
+  dragging = null;
+  pointerId = null;
+
   lockMergeWin();
 }
 
-/* ===== BUFFER ===== */
-function moveToBuffer(p){
-  for(var x=0;x<COLS;x++){
-    if(!pieces.some(q=>q.x===x && q.y===ROWS)){
-      p.x=x; p.y=ROWS; return;
+/* ==== ALTTAKİ PARÇAYI BOŞ YERE KAYDIR ==== */
+function moveOccupied(piece, grid) {
+  if (piece.locked) return;
+
+  // Önce buffer satırına bak
+  for (var x = 0; x < COLS; x++) {
+    if (!grid[ROWS][x]) {
+      grid[piece.y][piece.x] = null;
+      piece.x = x;
+      piece.y = ROWS;
+      grid[ROWS][x] = piece;
+      return;
+    }
+  }
+
+  // Buffer doluysa: yukarıdan aşağı boş ara
+  for (var y = 0; y < ROWS; y++) {
+    for (var x2 = 0; x2 < COLS; x2++) {
+      if (!grid[y][x2]) {
+        grid[piece.y][piece.x] = null;
+        piece.x = x2;
+        piece.y = y;
+        grid[y][x2] = piece;
+        return;
+      }
     }
   }
 }
 
-/* ===== LOCK + MERGE + WIN ===== */
-function lockMergeWin(){
-  pieces.forEach(p=>{
-    if(!p.locked && p.x===p.cx && p.y===p.cy){
-      p.locked=true;
+/* ==== LOCK + MERGE + WIN ==== */
+function lockMergeWin() {
+  pieces.forEach(function (p) {
+    if (!p.locked && p.x === p.cx && p.y === p.cy) {
+      p.locked = true;
       p.el.classList.add("locked");
     }
   });
 
-  for(var i=0;i<pieces.length;i++){
-    for(var j=0;j<pieces.length;j++){
-      var a=pieces[i], b=pieces[j];
-      if(a.gid===b.gid||!a.locked||!b.locked) continue;
-      var right=a.cx+1===b.cx && a.x+1===b.x && a.y===b.y;
-      var down =a.cy+1===b.cy && a.y+1===b.y && a.x===b.x;
-      if(right||down){
-        groups[b.gid].forEach(p=>{
-          p.gid=a.gid;
+  for (var i = 0; i < pieces.length; i++) {
+    for (var j = 0; j < pieces.length; j++) {
+      var a = pieces[i], b = pieces[j];
+      if (a.gid === b.gid || !a.locked || !b.locked) continue;
+      var right = a.cx + 1 === b.cx && a.x + 1 === b.x && a.y === b.y;
+      var down  = a.cy + 1 === b.cy && a.y + 1 === b.y && a.x === b.x;
+      if (right || down) {
+        groups[b.gid].forEach(function (p) {
+          p.gid = a.gid;
           groups[a.gid].push(p);
         });
         delete groups[b.gid];
-        break;
+        return;
       }
     }
   }
 
-  if(pieces.every(p=>p.locked)){
-    var w=document.getElementById("win");
+  if (pieces.every(function (p) { return p.locked; })) {
+    var w = document.getElementById("win");
     w.classList.add("show");
-    if(navigator.vibrate) navigator.vibrate([100,50,100]);
+    if (navigator.vibrate) navigator.vibrate([100,50,100]);
   }
 }
 </script>
+
 </body>
 </html>
