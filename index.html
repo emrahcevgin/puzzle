@@ -32,7 +32,8 @@ body {
 .piece.locked { border: none; }
 .buffer-line {
   position: absolute;
-  left: 0; right: 0;
+  left: 0;
+  right: 0;
   border-top: 2px dashed #555;
 }
 #win {
@@ -45,7 +46,7 @@ body {
   font-size: 32px;
   opacity: 0;
   pointer-events: none;
-  transition: .3s;
+  transition: opacity .3s;
 }
 #win.show { opacity: 1; }
 </style>
@@ -61,7 +62,7 @@ body {
 <div id="win">🎉 Puzzle Tamamlandı!</div>
 
 <script>
-/* ==== AYAR ==== */
+/* ===== AYAR ===== */
 var ROWS = 3;
 var COLS = 5;
 var BUFFER = 1;
@@ -76,7 +77,7 @@ var ox = 0, oy = 0;
 var board = document.getElementById("board");
 var input = document.getElementById("file");
 
-/* ==== FOTO ==== */
+/* ===== FOTO ===== */
 input.onchange = function () {
   var f = input.files[0];
   if (!f) return;
@@ -108,9 +109,11 @@ function init(src) {
     board.appendChild(bl);
 
     var cells = [];
-    for (var y = 0; y < ROWS + BUFFER; y++)
-      for (var x = 0; x < COLS; x++)
+    for (var y = 0; y < ROWS + BUFFER; y++) {
+      for (var x = 0; x < COLS; x++) {
         cells.push({ x: x, y: y });
+      }
+    }
     cells.sort(function () { return Math.random() - 0.5; });
 
     var gid = 0;
@@ -131,8 +134,10 @@ function init(src) {
 
         var p = {
           el: el,
-          cx: rx, cy: ry,
-          x: c.x, y: c.y,
+          cx: rx,
+          cy: ry,
+          x: c.x,
+          y: c.y,
           locked: false,
           gid: gid
         };
@@ -150,7 +155,7 @@ function init(src) {
   img.src = src;
 }
 
-/* ==== DRAG ==== */
+/* ===== DRAG ===== */
 function startDrag(e, p) {
   if (p.locked || pointerId !== null) return;
   pointerId = e.pointerId;
@@ -160,9 +165,9 @@ function startDrag(e, p) {
   ox = e.clientX - r.left;
   oy = e.clientY - r.top;
 
-  dragging.forEach(function (q) {
-    q.el.classList.add("dragging");
-  });
+  for (var i = 0; i < dragging.length; i++) {
+    dragging[i].el.classList.add("dragging");
+  }
 
   p.el.setPointerCapture(pointerId);
 }
@@ -170,20 +175,18 @@ function startDrag(e, p) {
 board.onpointermove = function (e) {
   if (!dragging || e.pointerId !== pointerId) return;
   var base = dragging[0];
-  dragging.forEach(function (p) {
+  for (var i = 0; i < dragging.length; i++) {
+    var p = dragging[i];
     p.el.style.left =
-      (e.clientX - board.offsetLeft - ox +
-      (p.x - base.x) * PW) + "px";
+      (e.clientX - board.offsetLeft - ox + (p.x - base.x) * PW) + "px";
     p.el.style.top =
-      (e.clientY - board.offsetTop - oy +
-      (p.y - base.y) * PH) + "px";
-  });
+      (e.clientY - board.offsetTop - oy + (p.y - base.y) * PH) + "px";
+  }
 };
 
 board.onpointerup = drop;
 board.onpointercancel = drop;
 
-/* ==== DROP + GERÇEK KAYMA ==== */
 function drop() {
   if (!dragging) return;
 
@@ -191,41 +194,13 @@ function drop() {
   var nx = Math.round(base.el.offsetLeft / PW);
   var ny = Math.round(base.el.offsetTop  / PH);
 
-  // Yeni grid konumları
-  dragging.forEach(function (p) {
-    p.x = nx + (p.x - base.x);
-    p.y = ny + (p.y - base.y);
-  });
-
-  // === GRID DOLULUK HARİTASI ===
-  var grid = [];
-  for (var y = 0; y < ROWS + BUFFER; y++) {
-    grid[y] = [];
-    for (var x = 0; x < COLS; x++) grid[y][x] = null;
+  for (var i = 0; i < dragging.length; i++) {
+    dragging[i].x = nx + (dragging[i].x - base.x);
+    dragging[i].y = ny + (dragging[i].y - base.y);
+    dragging[i].el.style.left = (dragging[i].x * PW) + "px";
+    dragging[i].el.style.top  = (dragging[i].y * PH) + "px";
+    dragging[i].el.classList.remove("dragging");
   }
-
-  // Drag edilen grup hariç grid'i doldur
-  pieces.forEach(function (p) {
-    if (dragging.indexOf(p) !== -1) return;
-    if (p.y >= 0 && p.y < ROWS + BUFFER &&
-        p.x >= 0 && p.x < COLS) {
-      grid[p.y][p.x] = p;
-    }
-  });
-
-  // ÇAKIŞMA VARSA → ALTTAKİ PARÇAYI TAŞI
-  dragging.forEach(function (p) {
-    if (grid[p.y] && grid[p.y][p.x]) {
-      moveOccupied(grid[p.y][p.x], grid);
-    }
-    grid[p.y][p.x] = p;
-  });
-
-  dragging.forEach(function (p) {
-    p.el.style.left = (p.x * PW) + "px";
-    p.el.style.top  = (p.y * PH) + "px";
-    p.el.classList.remove("dragging");
-  });
 
   dragging = null;
   pointerId = null;
@@ -233,65 +208,47 @@ function drop() {
   lockMergeWin();
 }
 
-/* ==== ALTTAKİ PARÇAYI BOŞ YERE KAYDIR ==== */
-function moveOccupied(piece, grid) {
-  if (piece.locked) return;
-
-  // Önce buffer satırına bak
-  for (var x = 0; x < COLS; x++) {
-    if (!grid[ROWS][x]) {
-      grid[piece.y][piece.x] = null;
-      piece.x = x;
-      piece.y = ROWS;
-      grid[ROWS][x] = piece;
-      return;
-    }
-  }
-
-  // Buffer doluysa: yukarıdan aşağı boş ara
-  for (var y = 0; y < ROWS; y++) {
-    for (var x2 = 0; x2 < COLS; x2++) {
-      if (!grid[y][x2]) {
-        grid[piece.y][piece.x] = null;
-        piece.x = x2;
-        piece.y = y;
-        grid[y][x2] = piece;
-        return;
-      }
-    }
-  }
-}
-
-/* ==== LOCK + MERGE + WIN ==== */
+/* ===== LOCK + MERGE + WIN ===== */
 function lockMergeWin() {
-  pieces.forEach(function (p) {
+  for (var i = 0; i < pieces.length; i++) {
+    var p = pieces[i];
     if (!p.locked && p.x === p.cx && p.y === p.cy) {
       p.locked = true;
       p.el.classList.add("locked");
     }
-  });
+  }
 
-  for (var i = 0; i < pieces.length; i++) {
-    for (var j = 0; j < pieces.length; j++) {
-      var a = pieces[i], b = pieces[j];
-      if (a.gid === b.gid || !a.locked || !b.locked) continue;
-      var right = a.cx + 1 === b.cx && a.x + 1 === b.x && a.y === b.y;
-      var down  = a.cy + 1 === b.cy && a.y + 1 === b.y && a.x === b.x;
+  for (var a = 0; a < pieces.length; a++) {
+    for (var b = 0; b < pieces.length; b++) {
+      var pa = pieces[a];
+      var pb = pieces[b];
+      if (pa.gid === pb.gid || !pa.locked || !pb.locked) continue;
+
+      var right = pa.cx + 1 === pb.cx && pa.x + 1 === pb.x && pa.y === pb.y;
+      var down  = pa.cy + 1 === pb.cy && pa.y + 1 === pb.y && pa.x === pb.x;
+
       if (right || down) {
-        groups[b.gid].forEach(function (p) {
-          p.gid = a.gid;
-          groups[a.gid].push(p);
-        });
-        delete groups[b.gid];
-        return;
+        for (var k = 0; k < groups[pb.gid].length; k++) {
+          groups[pb.gid][k].gid = pa.gid;
+          groups[pa.gid].push(groups[pb.gid][k]);
+        }
+        delete groups[pb.gid];
+        break;
       }
     }
   }
 
-  if (pieces.every(function (p) { return p.locked; })) {
-    var w = document.getElementById("win");
-    w.classList.add("show");
-    if (navigator.vibrate) navigator.vibrate([100,50,100]);
+  var done = true;
+  for (var i2 = 0; i2 < pieces.length; i2++) {
+    if (!pieces[i2].locked) done = false;
+  }
+
+  if (done) {
+    var win = document.getElementById("win");
+    win.classList.add("show");
+    if (navigator.vibrate) {
+      navigator.vibrate([100,50,100]);
+    }
   }
 }
 </script>
