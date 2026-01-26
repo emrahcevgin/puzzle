@@ -28,10 +28,7 @@ body{
   background-repeat:no-repeat;
   transition:left .2s, top .2s;
 }
-.block-piece.dragging{
-  transition:none;
-  z-index:10;
-}
+.block-piece.dragging{transition:none;z-index:10}
 </style>
 </head>
 
@@ -44,26 +41,25 @@ body{
 
 <script>
 /* ===== CONFIG ===== */
-var ROWS = 3;
-var COLS = 5;
+var ROWS=3, COLS=5;
 
 /* ===== STATE ===== */
-var PW, PH;
-var blocks = [];
-var draggingBlock = null;
-var pointerId = null;
-var ox = 0, oy = 0;
+var PW,PH;
+var blocks=[]; // {id, pieces:[{cx,cy,x,y,el}]}
+var draggingBlock=null;
+var pointerId=null;
+var ox=0, oy=0;
 
 /* ===== DOM ===== */
-var board = document.getElementById("board");
-var input = document.getElementById("file");
+var board=document.getElementById("board");
+var input=document.getElementById("file");
 
 /* ===== IMAGE LOAD ===== */
-input.onchange = function(){
-  var f = input.files[0];
+input.onchange=function(){
+  var f=input.files[0];
   if(!f) return;
-  var r = new FileReader();
-  r.onload = function(e){ init(e.target.result); };
+  var r=new FileReader();
+  r.onload=function(e){ init(e.target.result); };
   r.readAsDataURL(f);
 };
 
@@ -73,27 +69,18 @@ function init(src){
 
   var img=new Image();
   img.onload=function(){
+    var maxW=innerWidth*0.95;
+    var maxH=innerHeight*0.7;
+    var ratio=img.width/img.height;
+    var W=maxW, H=W/ratio;
+    if(H>maxH){ H=maxH; W=H*ratio; }
 
-    /* === BOARD SIZE (EKRANA SIĞDIR) === */
-    var maxW = window.innerWidth * 0.95;
-    var maxH = window.innerHeight * 0.7;
-    var ratio = img.width / img.height;
+    PW=W/COLS;
+    PH=H/ROWS;
+    board.style.width=W+"px";
+    board.style.height=H+"px";
 
-    var W = maxW;
-    var H = W / ratio;
-    if(H > maxH){
-      H = maxH;
-      W = H * ratio;
-    }
-
-    PW = W / COLS;
-    PH = H / ROWS;
-
-    board.style.width = W + "px";
-    board.style.height = H + "px";
-
-    /* === CREATE PIECES === */
-    var id = 0;
+    var id=0;
     for(var y=0;y<ROWS;y++){
       for(var x=0;x<COLS;x++){
         var el=document.createElement("div");
@@ -107,8 +94,7 @@ function init(src){
 
         var piece={cx:x,cy:y,x:x,y:y,el:el};
         var block={id:id,pieces:[piece]};
-        blocks.push(block);
-        id++;
+        blocks.push(block); id++;
 
         el.onpointerdown=(function(b,p){
           return function(e){ startDrag(e,b,p); };
@@ -116,21 +102,19 @@ function init(src){
       }
     }
 
-    shuffle();
+    shuffleBlocks();
     drawAll();
   };
   img.src=src;
 }
 
 /* ===== SHUFFLE ===== */
-function shuffle(){
+function shuffleBlocks(){
   var cells=[];
   for(var y=0;y<ROWS;y++)
     for(var x=0;x<COLS;x++)
       cells.push({x:x,y:y});
-
   cells.sort(function(){return Math.random()-0.5});
-
   blocks.forEach(function(b,i){
     b.pieces[0].x=cells[i].x;
     b.pieces[0].y=cells[i].y;
@@ -143,11 +127,9 @@ function startDrag(e,block,piece){
   pointerId=e.pointerId;
   draggingBlock=block;
 
-  var boardRect = board.getBoundingClientRect();
-  var pieceRect = piece.el.getBoundingClientRect();
-
-  ox = e.clientX - pieceRect.left;
-  oy = e.clientY - pieceRect.top;
+  var rect=piece.el.getBoundingClientRect();
+  ox=e.clientX-rect.left;
+  oy=e.clientY-rect.top;
 
   block.pieces.forEach(function(p){
     p.el.classList.add("dragging");
@@ -157,43 +139,97 @@ function startDrag(e,block,piece){
 }
 
 board.onpointermove=function(e){
-  if(!draggingBlock || e.pointerId!==pointerId) return;
-
-  var boardRect = board.getBoundingClientRect();
-  var base = draggingBlock.pieces[0];
+  if(!draggingBlock||e.pointerId!==pointerId) return;
+  var boardRect=board.getBoundingClientRect();
+  var base=draggingBlock.pieces[0];
 
   draggingBlock.pieces.forEach(function(p){
-    p.el.style.left =
-      (e.clientX - boardRect.left - ox + (p.x-base.x)*PW) + "px";
+    p.el.style.left=
+      e.clientX-boardRect.left-ox+(p.x-base.x)*PW+"px";
     p.el.style.top =
-      (e.clientY - boardRect.top - oy + (p.y-base.y)*PH) + "px";
+      e.clientY-boardRect.top -oy+(p.y-base.y)*PH+"px";
   });
 };
 
 board.onpointerup=endDrag;
 board.onpointercancel=endDrag;
 
-/* ===== DROP ===== */
+/* ===== DROP + BLOCK KAYMA ===== */
 function endDrag(){
   if(!draggingBlock) return;
 
-  var base = draggingBlock.pieces[0];
-  var boardRect = board.getBoundingClientRect();
+  var base=draggingBlock.pieces[0];
+  var nx=Math.round(base.el.offsetLeft/PW);
+  var ny=Math.round(base.el.offsetTop /PH);
 
-  var nx = Math.round((base.el.offsetLeft) / PW);
-  var ny = Math.round((base.el.offsetTop)  / PH);
+  var targets=[];
+  draggingBlock.pieces.forEach(function(p){
+    targets.push({p:p,x:nx+(p.x-base.x),y:ny+(p.y-base.y)});
+  });
+
+  var occ=buildOccupancy(draggingBlock);
+
+  targets.forEach(function(t){
+    var hit=occ[t.y] && occ[t.y][t.x];
+    if(hit && hit!==draggingBlock){
+      shiftBlock(hit,occ);
+    }
+  });
+
+  targets.forEach(function(t){
+    t.p.x=t.x;
+    t.p.y=t.y;
+    occ[t.y][t.x]=draggingBlock;
+  });
 
   draggingBlock.pieces.forEach(function(p){
-    p.x = nx + (p.x-base.x);
-    p.y = ny + (p.y-base.y);
     p.el.classList.remove("dragging");
   });
 
-  draggingBlock = null;
-  pointerId = null;
+  draggingBlock=null;
+  pointerId=null;
 
   mergeBlocks();
   drawAll();
+}
+
+/* ===== OCCUPANCY ===== */
+function buildOccupancy(ignore){
+  var o=[];
+  for(var y=0;y<ROWS;y++){
+    o[y]=[];
+    for(var x=0;x<COLS;x++) o[y][x]=null;
+  }
+  blocks.forEach(function(b){
+    if(b===ignore) return;
+    b.pieces.forEach(function(p){
+      o[p.y][p.x]=b;
+    });
+  });
+  return o;
+}
+
+/* ===== SHIFT BLOCK ===== */
+function shiftBlock(block,occ){
+  var cells=[];
+  for(var y=0;y<ROWS;y++)
+    for(var x=0;x<COLS;x++)
+      if(!occ[y][x]) cells.push({x:x,y:y});
+
+  if(!cells.length) return;
+
+  var base=block.pieces[0];
+  var dest=cells[0];
+
+  block.pieces.forEach(function(p){
+    occ[p.y][p.x]=null;
+    p.x=dest.x+(p.x-base.x);
+    p.y=dest.y+(p.y-base.y);
+  });
+
+  block.pieces.forEach(function(p){
+    occ[p.y][p.x]=block;
+  });
 }
 
 /* ===== MERGE ===== */
@@ -203,7 +239,7 @@ function mergeBlocks(){
       if(i===j) continue;
       var A=blocks[i], B=blocks[j];
       if(canMerge(A,B)){
-        A.pieces = A.pieces.concat(B.pieces);
+        A.pieces=A.pieces.concat(B.pieces);
         blocks.splice(j,1);
         return mergeBlocks();
       }
@@ -214,8 +250,7 @@ function mergeBlocks(){
 function canMerge(A,B){
   for(var i=0;i<A.pieces.length;i++){
     for(var j=0;j<B.pieces.length;j++){
-      var a=A.pieces[i];
-      var b=B.pieces[j];
+      var a=A.pieces[i], b=B.pieces[j];
       var right=a.cx+1===b.cx && a.x+1===b.x && a.y===b.y;
       var down =a.cy+1===b.cy && a.y+1===b.y && a.x===b.x;
       if(right||down) return true;
