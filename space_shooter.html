@@ -2,55 +2,85 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Uzay Savaşı - Retro Arcade</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Uzay Savaşı - iOS Mobile</title>
     <style>
+        :root {
+            --safe-top: env(safe-area-inset-top);
+            --safe-bottom: env(safe-area-inset-bottom);
+        }
         body { 
             margin: 0; 
-            background: #0a0a0a; 
+            background: #000; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            min-height: 100vh; 
+            height: 100vh;
+            height: -webkit-fill-available; /* iOS Safari için tam boy */
             color: white; 
-            font-family: 'Courier New', monospace;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             overflow: hidden;
             touch-action: none;
         }
         #game-container { 
             position: relative; 
-            border: 4px solid #333; 
-            box-shadow: 0 0 20px rgba(0,255,255,0.2);
-            max-width: 100vw;
-            max-height: 100vh;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
         canvas { 
             background: #000510; 
             display: block;
-            max-width: 100%;
-            max-height: 100vh;
-            touch-action: none;
+            box-shadow: 0 0 20px rgba(0,255,255,0.1);
         }
         #ui { 
             position: absolute; 
-            top: 10px; 
+            top: calc(10px + var(--safe-top)); 
             left: 10px; 
+            right: 10px;
             pointer-events: none; 
-            font-size: 16px; 
+            font-size: 14px; 
             color: #0f0;
             z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            text-shadow: 1px 1px 2px black;
         }
-        @media (max-width: 768px) {
-            #ui { font-size: 14px; }
+        #start-screen {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .btn {
+            padding: 15px 40px;
+            background: #00ffff;
+            color: #000;
+            border: none;
+            border-radius: 30px;
+            font-weight: bold;
+            font-size: 18px;
+            text-transform: uppercase;
         }
     </style>
 </head>
 <body>
     <div id="game-container">
+        <div id="start-screen">
+            <h1 style="color: #00ffff; margin-bottom: 20px;">UZAY SAVAŞI</h1>
+            <button class="btn" onclick="startGame()">BAŞLA</button>
+            <p style="margin-top: 15px; font-size: 12px; opacity: 0.7;">Sürükleyerek Hareket Et</p>
+        </div>
         <div id="ui">
-            PUAN: <span id="score">0</span> | 
-            CAN: <span id="lives">3</span> | 
-            DALGA: <span id="wave">1</span> | 
-            GÜÇ: <span id="power">1</span>
+            <div>SKOR: <span id="score">0</span></div>
+            <div>DALGA: <span id="wave">1</span></div>
+            <div>CAN: <span id="lives">3</span></div>
         </div>
         <canvas id="gameCanvas"></canvas>
     </div>
@@ -58,586 +88,195 @@
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        
-        // Önce canvas boyutunu ayarla
-        const maxWidth = Math.min(450, window.innerWidth - 20);
-        const maxHeight = Math.min(650, window.innerHeight - 20);
-        const ratio = 450 / 650;
-        
-        if (maxWidth / maxHeight > ratio) {
-            canvas.height = maxHeight;
-            canvas.width = maxHeight * ratio;
-        } else {
-            canvas.width = maxWidth;
-            canvas.height = maxWidth / ratio;
-        }
+        const startScreen = document.getElementById('start-screen');
         
         let score = 0; 
         let lives = 3; 
         let wave = 1; 
         let gameOver = false;
         let powerLevel = 1;
-        let powerUpTimer = 0;
-        let boss = null;
-        let bossWarningShown = false;
-        let isTouching = false;
-        let touchStartX = 0;
-        let touchStartY = 0;
-        let showChapterMessage = false;
-        let chapterMessageTimer = 0;
-        let currentChapter = 1;
+        let isGameRunning = false;
         
-        const keys = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false, Space: true };
+        // Gemi ve mermiler
+        const player = { x: 0, y: 0, w: 40, h: 45, speed: 7 };
         let bullets = []; 
         let enemies = []; 
         let enemyBullets = [];
         let shields = [];
         let floatingPowerUps = [];
         let shootCooldown = 0;
-        let enemyShootTimer = 0;
 
-        const player = { x: canvas.width / 2 - 20, y: canvas.height - 80, w: 40, h: 45, speed: 6 };
-        
-        // Mobil uyumlu boyut
         function resizeCanvas() {
-            const maxWidth = Math.min(450, window.innerWidth - 20);
-            const maxHeight = Math.min(650, window.innerHeight - 20);
-            const ratio = 450 / 650;
-            
-            if (maxWidth / maxHeight > ratio) {
-                canvas.height = maxHeight;
-                canvas.width = maxHeight * ratio;
-            } else {
-                canvas.width = maxWidth;
-                canvas.height = maxWidth / ratio;
-            }
-            
-            // Canvas boyutu değişince oyuncu pozisyonunu güncelle
-            player.x = canvas.width / 2 - 20;
-            player.y = canvas.height - 80;
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            player.x = canvas.width / 2 - player.w / 2;
+            player.y = canvas.height - 120;
+            createShields();
         }
-        
-        resizeCanvas();
-        createShields(); // resizeCanvas'tan hemen sonra oluştur
+
         window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
-        // Kalkanları oluştur
-        function createShields() {
-            shields = [];
-            const shieldY = canvas.height - 150;
-            const spacing = canvas.width / 4;
-            const blockSize = 4;
-            
-            for (let i = 0; i < 3; i++) {
-                const shieldX = spacing * (i + 1) - 30;
-                const shieldW = 60;
-                const shieldH = 40;
-                const cols = Math.floor(shieldW / blockSize);
-                const rows = Math.floor(shieldH / blockSize);
-                const blocks = [];
-                
-                for (let row = 0; row < rows; row++) {
-                    blocks[row] = [];
-                    for (let col = 0; col < cols; col++) {
-                        const centerX = cols / 2;
-                        const centerY = rows / 2;
-                        const distance = Math.sqrt(Math.pow(col - centerX, 2) + Math.pow(row - centerY, 2));
-                        blocks[row][col] = distance < Math.min(cols, rows) / 2 ? 1 : 0;
-                    }
-                }
-                
-                shields.push({
-                    x: shieldX, y: shieldY, w: shieldW, h: shieldH,
-                    blockSize: blockSize, blocks: blocks, cols: cols, rows: rows
-                });
-            }
+        function startGame() {
+            startScreen.style.display = 'none';
+            isGameRunning = true;
+            resetGame();
+            animate();
         }
 
-        window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.code)) keys[e.code] = true; });
-        window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.code)) keys[e.code] = false; });
-
-        // Touch/Mouse kontrolleri - Sürükle ile hareket
-        function getCanvasPosition(e) {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            
-            let clientX, clientY;
-            if (e.touches && e.touches.length > 0) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            } else {
-                clientX = e.clientX;
-                clientY = e.clientY;
-            }
-            
-            return {
-                x: (clientX - rect.left) * scaleX,
-                y: (clientY - rect.top) * scaleY
-            };
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            wave = 1;
+            powerLevel = 1;
+            enemies = [];
+            bullets = [];
+            enemyBullets = [];
+            spawnEnemies();
         }
 
-        // Touch start
-        canvas.addEventListener('touchstart', (e) => {
+        // TOUCH CONTROLS - iOS Optimizasyonu
+        let lastTouchX = null;
+        let lastTouchY = null;
+
+        canvas.addEventListener('touchstart', e => {
+            const touch = e.touches[0];
+            lastTouchX = touch.clientX;
+            lastTouchY = touch.clientY;
+        }, {passive: false});
+
+        canvas.addEventListener('touchmove', e => {
             e.preventDefault();
-            isTouching = true;
-            const pos = getCanvasPosition(e);
+            if (!isGameRunning) return;
             
-            // Geminin merkezine ayarla
-            player.x = pos.x - player.w / 2;
-            player.y = pos.y - player.h / 2;
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - lastTouchX;
+            const deltaY = touch.clientY - lastTouchY;
             
-            // Sınırları kontrol et
-            if (player.x < 0) player.x = 0;
-            if (player.x > canvas.width - player.w) player.x = canvas.width - player.w;
-            if (player.y < canvas.height / 4) player.y = canvas.height / 4; // 3/4 yukarı
-            if (player.y > canvas.height - player.h - 10) player.y = canvas.height - player.h - 10;
-        });
+            player.x += deltaX;
+            player.y += deltaY;
 
-        // Touch move
-        canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            if (isTouching) {
-                const pos = getCanvasPosition(e);
-                
-                player.x = pos.x - player.w / 2;
-                player.y = pos.y - player.h / 2;
-                
-                // Sınırları kontrol et
-                if (player.x < 0) player.x = 0;
-                if (player.x > canvas.width - player.w) player.x = canvas.width - player.w;
-                if (player.y < canvas.height / 4) player.y = canvas.height / 4; // 3/4 yukarı
-                if (player.y > canvas.height - player.h - 10) player.y = canvas.height - player.h - 10;
-            }
-        });
+            // Sınırlar
+            player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
+            player.y = Math.max(canvas.height * 0.2, Math.min(canvas.height - player.h - 20, player.y));
 
-        // Touch end
-        canvas.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            isTouching = false;
-        });
+            lastTouchX = touch.clientX;
+            lastTouchY = touch.clientY;
+        }, {passive: false});
 
-        // Mouse desteği (PC için)
-        canvas.addEventListener('mousedown', (e) => {
-            isTouching = true;
-            const pos = getCanvasPosition(e);
-            
-            player.x = pos.x - player.w / 2;
-            player.y = pos.y - player.h / 2;
-            
-            if (player.x < 0) player.x = 0;
-            if (player.x > canvas.width - player.w) player.x = canvas.width - player.w;
-            if (player.y < canvas.height / 4) player.y = canvas.height / 4; // 3/4 yukarı
-            if (player.y > canvas.height - player.h - 10) player.y = canvas.height - player.h - 10;
-        });
-
-        canvas.addEventListener('mousemove', (e) => {
-            if (isTouching) {
-                const pos = getCanvasPosition(e);
-                
-                player.x = pos.x - player.w / 2;
-                player.y = pos.y - player.h / 2;
-                
-                if (player.x < 0) player.x = 0;
-                if (player.x > canvas.width - player.w) player.x = canvas.width - player.w;
-                if (player.y < canvas.height / 4) player.y = canvas.height / 4; // 3/4 yukarı
-                if (player.y > canvas.height - player.h - 10) player.y = canvas.height - player.h - 10;
-            }
-        });
-
-        canvas.addEventListener('mouseup', () => {
-            isTouching = false;
-        });
-
-        canvas.addEventListener('mouseleave', () => {
-            isTouching = false;
-        });
-
+        // Çizim Fonksiyonları (Orijinal Koddan adapte edildi)
         function drawPlayer(x, y) {
-            ctx.fillStyle = Math.random() > 0.5 ? '#ff4500' : '#ff8c00';
+            ctx.fillStyle = '#ff4500';
             ctx.fillRect(x + 15, y + 35, 10, 10);
             ctx.fillStyle = '#900';
             ctx.fillRect(x, y + 20, 40, 10);
-            ctx.fillStyle = powerLevel === 3 ? '#ff00ff' : powerLevel === 2 ? '#ff6600' : '#ff0000';
+            ctx.fillStyle = powerLevel >= 2 ? '#00ffff' : '#ff0000';
             ctx.fillRect(x + 12, y, 16, 40);
-            ctx.fillStyle = '#87ceeb';
-            ctx.fillRect(x + 15, y + 10, 10, 8);
         }
 
         function drawEnemy(x, y) {
             ctx.fillStyle = '#00ffff';
-            ctx.fillRect(x + 10, y, 10, 5);
-            ctx.fillStyle = '#0055ff';
-            ctx.fillRect(x, y + 5, 30, 15);
+            ctx.fillRect(x + 5, y, 20, 15);
             ctx.fillStyle = '#fff';
-            ctx.fillRect(x + 5, y + 10, 4, 4);
-            ctx.fillRect(x + 21, y + 10, 4, 4);
-        }
-
-        function drawBoss(boss) {
-            const x = boss.x, y = boss.y, w = boss.w, h = boss.h;
-            
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = '#ff0000';
-            
-            ctx.fillStyle = '#8800ff';
-            ctx.fillRect(x, y + h * 0.2, w, h * 0.6);
-            ctx.fillStyle = '#6600cc';
-            ctx.fillRect(x - w * 0.3, y + h * 0.3, w * 0.3, h * 0.4);
-            ctx.fillRect(x + w, y + h * 0.3, w * 0.3, h * 0.4);
-            ctx.fillStyle = '#aa00ff';
-            ctx.fillRect(x + w * 0.3, y, w * 0.4, h * 0.3);
-            ctx.fillStyle = '#ff0000';
-            ctx.fillRect(x + w * 0.35, y + h * 0.1, w * 0.1, h * 0.1);
-            ctx.fillRect(x + w * 0.55, y + h * 0.1, w * 0.1, h * 0.1);
-            ctx.fillStyle = Math.random() > 0.5 ? '#ff4500' : '#ff8c00';
-            ctx.fillRect(x + w * 0.2, y + h * 0.85, w * 0.2, h * 0.15);
-            ctx.fillRect(x + w * 0.6, y + h * 0.85, w * 0.2, h * 0.15);
-            
-            ctx.shadowBlur = 0;
-            
-            const healthPercent = boss.health / boss.maxHealth;
-            ctx.fillStyle = '#333';
-            ctx.fillRect(x, y - 20, w, 8);
-            ctx.fillStyle = healthPercent > 0.5 ? '#0f0' : healthPercent > 0.25 ? '#ff0' : '#f00';
-            ctx.fillRect(x, y - 20, w * healthPercent, 8);
-            
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('BOSS - ' + Math.floor(boss.health) + ' HP', x + w/2, y - 25);
-            ctx.textAlign = 'left';
-        }
-
-        function drawShield(shield) {
-            for (let row = 0; row < shield.rows; row++) {
-                for (let col = 0; col < shield.cols; col++) {
-                    if (shield.blocks[row][col] === 1) {
-                        ctx.fillStyle = '#00ff00';
-                        ctx.fillRect(shield.x + col * shield.blockSize, shield.y + row * shield.blockSize, 
-                                   shield.blockSize - 1, shield.blockSize - 1);
-                    }
-                }
-            }
-        }
-        
-        function damageShield(shield, bulletX, bulletY, bulletW, bulletH, radius = 2) {
-            const centerX = bulletX + bulletW / 2;
-            const centerY = bulletY + bulletH / 2;
-            
-            for (let row = 0; row < shield.rows; row++) {
-                for (let col = 0; col < shield.cols; col++) {
-                    const blockX = shield.x + col * shield.blockSize + shield.blockSize / 2;
-                    const blockY = shield.y + row * shield.blockSize + shield.blockSize / 2;
-                    const distance = Math.sqrt(Math.pow(blockX - centerX, 2) + Math.pow(blockY - centerY, 2));
-                    if (distance < radius * shield.blockSize) shield.blocks[row][col] = 0;
-                }
-            }
-        }
-        
-        function checkShieldCollision(shield, bulletX, bulletY, bulletW, bulletH) {
-            if (bulletX + bulletW < shield.x || bulletX > shield.x + shield.w ||
-                bulletY + bulletH < shield.y || bulletY > shield.y + shield.h) return false;
-            
-            for (let row = 0; row < shield.rows; row++) {
-                for (let col = 0; col < shield.cols; col++) {
-                    if (shield.blocks[row][col] === 1) {
-                        const blockX = shield.x + col * shield.blockSize;
-                        const blockY = shield.y + row * shield.blockSize;
-                        if (bulletX < blockX + shield.blockSize && bulletX + bulletW > blockX &&
-                            bulletY < blockY + shield.blockSize && bulletY + bulletH > blockY) return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        function drawFloatingPowerUp(p) {
-            ctx.save();
-            ctx.translate(p.x + p.w/2, p.y + p.h/2);
-            ctx.rotate(p.rotation);
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = '#ff00ff';
-            ctx.fillStyle = '#ff00ff';
-            ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
-            ctx.fillStyle = '#ffff00';
-            ctx.fillRect(-p.w/3, -p.h/3, p.w * 0.66, p.h * 0.66);
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(-p.w/6, -p.h/6, p.w * 0.33, p.h * 0.33);
-            ctx.shadowBlur = 0;
-            ctx.restore();
-        }
-
-        function spawnPowerUp() {
-            floatingPowerUps.push({
-                x: Math.random() * (canvas.width - 40) + 20, y: -20, w: 18, h: 18,
-                speed: 2 + Math.random(), rotation: Math.random() * Math.PI * 2
-            });
+            ctx.fillRect(x + 8, y + 5, 4, 4);
+            ctx.fillRect(x + 18, y + 5, 4, 4);
         }
 
         function spawnEnemies() {
-            const enemyCount = 3 + Math.floor(wave / 2);
-            for (let i = 0; i < enemyCount; i++) {
-                setTimeout(() => {
-                    enemies.push({
-                        x: Math.random() * (canvas.width - 30), y: -50, w: 30, h: 25,
-                        centerX: Math.random() * (canvas.width - 100) + 50, offset: Math.random() * 10,
-                        speed: 1.3 + (wave * 0.05), canShoot: Math.random() > 0.6
-                    });
-                }, i * 700);
-            }
-        }
-
-        function spawnBoss() {
-            const bossLevel = Math.floor(wave / 3);
-            boss = {
-                x: canvas.width / 2 - 60, y: -150, w: 120, h: 100, speed: 0.5,
-                health: 30 + (bossLevel * 20), maxHealth: 30 + (bossLevel * 20),
-                moveDirection: 1, shootTimer: 0, pattern: 0
-            };
-        }
-
-        function shootBullet() {
-            if (powerLevel === 1) {
-                bullets.push({ x: player.x + player.w/2 - 2, y: player.y, w: 4, h: 12, damage: 1 });
-            } else if (powerLevel === 2) {
-                bullets.push({ x: player.x + 10, y: player.y, w: 4, h: 12, damage: 1 });
-                bullets.push({ x: player.x + player.w - 14, y: player.y, w: 4, h: 12, damage: 1 });
-            } else if (powerLevel === 3) {
-                bullets.push({ x: player.x + player.w/2 - 2, y: player.y, w: 4, h: 12, damage: 2 });
-                bullets.push({ x: player.x + 5, y: player.y + 5, w: 4, h: 12, damage: 2 });
-                bullets.push({ x: player.x + player.w - 9, y: player.y + 5, w: 4, h: 12, damage: 2 });
+            if (!isGameRunning) return;
+            const count = 3 + wave;
+            for (let i = 0; i < count; i++) {
+                enemies.push({
+                    x: Math.random() * (canvas.width - 30),
+                    y: -50 - (i * 100),
+                    w: 30, h: 25,
+                    speed: 1.5 + (wave * 0.2),
+                    sideMove: Math.sin(i) * 2
+                });
             }
         }
 
         function update() {
-            if (gameOver) return;
-            
-            // Klavye kontrolleri (sadece PC için)
-            if (keys.ArrowLeft && player.x > 0) player.x -= player.speed;
-            if (keys.ArrowRight && player.x < canvas.width - player.w) player.x += player.speed;
-            if (keys.ArrowUp && player.y > canvas.height / 4) player.y -= player.speed; // 3/4 yukarı çıkabilir
-            if (keys.ArrowDown && player.y < canvas.height - player.h - 10) player.y += player.speed;
-            
-            // Otomatik ateş - her zaman
+            if (!isGameRunning) return;
+
+            // Otomatik Ateş
             if (shootCooldown <= 0) {
-                shootBullet();
-                shootCooldown = 10;
+                bullets.push({ x: player.x + player.w/2 - 2, y: player.y, w: 4, h: 12 });
+                shootCooldown = 12;
             }
-            if (shootCooldown > 0) shootCooldown--;
+            shootCooldown--;
 
-            // Bölüm mesajı zamanlayıcı
-            if (showChapterMessage) {
-                chapterMessageTimer++;
-                if (chapterMessageTimer > 120) { // 2 saniye
-                    showChapterMessage = false;
-                    chapterMessageTimer = 0;
-                }
-            }
-
-            powerUpTimer++;
-            if (powerUpTimer > 480) {
-                spawnPowerUp();
-                powerUpTimer = 0;
-            }
-
+            // Mermiler
             bullets.forEach((b, i) => {
-                b.y -= 8;
-                if (b.y < 0) { bullets.splice(i, 1); return; }
-                
-                let hitShield = false;
-                shields.forEach(s => {
-                    if (!hitShield && checkShieldCollision(s, b.x, b.y, b.w, b.h)) {
-                        damageShield(s, b.x, b.y, b.w, b.h, 2);
-                        bullets.splice(i, 1);
-                        hitShield = true;
-                    }
-                });
-                
-                // Boss çarpışması
-                if (!hitShield && boss && b.x < boss.x + boss.w && b.x + b.w > boss.x && 
-                    b.y < boss.y + boss.h && b.y + b.h > boss.y) {
-                    boss.health -= b.damage || 1;
-                    bullets.splice(i, 1);
-                    
-                    if (boss.health <= 0) {
-                        score += 500;
-                        document.getElementById('score').innerText = score;
-                        for (let j = 0; j < 3; j++) {
-                            floatingPowerUps.push({
-                                x: boss.x + Math.random() * boss.w, y: boss.y + boss.h / 2,
-                                w: 18, h: 18, speed: 2 + Math.random(), rotation: Math.random() * Math.PI * 2
-                            });
-                        }
-                        boss = null;
-                        bossWarningShown = false;
-                    }
-                }
+                b.y -= 10;
+                if (b.y < 0) bullets.splice(i, 1);
             });
 
-            enemyBullets.forEach((b, i) => {
-                if (b.vx !== undefined) { b.x += b.vx; b.y += b.vy; }
-                else b.y += 5;
-                
-                if (b.y > canvas.height || b.x < 0 || b.x > canvas.width) { enemyBullets.splice(i, 1); return; }
-                
-                let hitShield = false;
-                shields.forEach(s => {
-                    if (!hitShield && checkShieldCollision(s, b.x, b.y, b.w, b.h)) {
-                        damageShield(s, b.x, b.y, b.w, b.h, 1.5);
-                        enemyBullets.splice(i, 1);
-                        hitShield = true;
-                    }
-                });
-                
-                if (!hitShield && b.x < player.x + player.w && b.x + b.w > player.x && 
-                    b.y < player.y + player.h && b.y + b.h > player.y) {
-                    enemyBullets.splice(i, 1);
-                    lives--;
-                    document.getElementById('lives').innerText = lives;
-                    if (lives <= 0) { gameOver = true; alert("OYUN BİTTİ! Skor: " + score); location.reload(); }
-                }
-            });
-
-            floatingPowerUps.forEach((p, i) => {
-                p.y += p.speed;
-                p.rotation += 0.15;
-                
-                if (p.x < player.x + player.w && p.x + p.w > player.x && 
-                    p.y < player.y + player.h && p.y + p.h > player.y) {
-                    floatingPowerUps.splice(i, 1);
-                    if (powerLevel < 3) {
-                        powerLevel++;
-                        document.getElementById('power').innerText = powerLevel;
-                    }
-                    score += 50;
-                    document.getElementById('score').innerText = score;
-                }
-                if (p.y > canvas.height) floatingPowerUps.splice(i, 1);
-            });
-
-            // Boss logic
-            if (boss) {
-                if (boss.y < 50) boss.y += 1;
-                else {
-                    boss.x += boss.moveDirection * boss.speed;
-                    if (boss.x <= 0 || boss.x + boss.w >= canvas.width) boss.moveDirection *= -1;
-                    
-                    boss.shootTimer++;
-                    if (boss.shootTimer > 40) {
-                        boss.shootTimer = 0;
-                        if (boss.pattern === 0) {
-                            enemyBullets.push({ x: boss.x + boss.w * 0.25, y: boss.y + boss.h, w: 4, h: 10 });
-                            enemyBullets.push({ x: boss.x + boss.w * 0.5, y: boss.y + boss.h, w: 4, h: 10 });
-                            enemyBullets.push({ x: boss.x + boss.w * 0.75, y: boss.y + boss.h, w: 4, h: 10 });
-                        } else {
-                            for (let i = 0; i < 5; i++) {
-                                enemyBullets.push({
-                                    x: boss.x + boss.w / 2, y: boss.y + boss.h, w: 4, h: 10,
-                                    vx: (i - 2) * 1.5, vy: 5
-                                });
-                            }
-                        }
-                        boss.pattern = (boss.pattern + 1) % 2;
-                    }
-                }
-                
-                // Boss oyuncu çarpışması
-                if (boss.x < player.x + player.w && boss.x + boss.w > player.x && 
-                    boss.y < player.y + player.h && boss.y + boss.h > player.y) {
-                    lives -= 2;
-                    document.getElementById('lives').innerText = lives;
-                    boss = null;
-                    bossWarningShown = false;
-                    if (lives <= 0) { gameOver = true; alert("OYUN BİTTİ! Skor: " + score); location.reload(); }
-                }
-            }
-
-            enemyShootTimer++;
-            enemies.forEach((e, ei) => {
+            // Düşmanlar
+            enemies.forEach((e, i) => {
                 e.y += e.speed;
-                e.offset += 0.04;
-                e.x = e.centerX + Math.sin(e.offset) * 70;
+                e.x += Math.sin(e.y / 50) * 2; // S dalga hareketi
 
-                if (e.canShoot && enemyShootTimer % 60 === 0 && Math.random() > 0.7) {
-                    enemyBullets.push({ x: e.x + e.w/2 - 2, y: e.y + e.h, w: 3, h: 8 });
+                // Çarpışma
+                if (player.x < e.x + e.w && player.x + player.w > e.x && player.y < e.y + e.h && player.y + player.h > e.y) {
+                    enemies.splice(i, 1);
+                    lives--;
+                    checkGameOver();
                 }
 
-                let enemyHit = false;
                 bullets.forEach((b, bi) => {
-                    if (!enemyHit && b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
-                        enemies.splice(ei, 1); 
+                    if (b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
+                        enemies.splice(i, 1);
                         bullets.splice(bi, 1);
-                        score += 10; 
+                        score += 10;
                         document.getElementById('score').innerText = score;
-                        enemyHit = true;
                     }
                 });
 
-                if (!enemyHit && (e.y > canvas.height || (e.x < player.x + player.w && e.x + e.w > player.x && 
-                     e.y < player.y + player.h && e.y + e.h > player.y))) {
-                    enemies.splice(ei, 1); 
-                    if (e.y <= canvas.height) {
-                        lives--; 
-                        document.getElementById('lives').innerText = lives;
-                        if (lives <= 0) { gameOver = true; alert("OYUN BİTTİ! Skor: " + score); location.reload(); }
-                    }
+                if (e.y > canvas.height) {
+                    enemies.splice(i, 1);
                 }
             });
 
-            if (enemies.length === 0 && !boss) { 
-                wave++; 
+            if (enemies.length === 0) {
+                wave++;
                 document.getElementById('wave').innerText = wave;
-                
-                if (wave % 3 === 0) {
-                    bossWarningShown = true;
-                    createShields();
-                    setTimeout(() => { spawnBoss(); }, 2000);
-                } else {
-                    spawnEnemies(); 
-                }
+                spawnEnemies();
+            }
+        }
+
+        function checkGameOver() {
+            document.getElementById('lives').innerText = lives;
+            if (lives <= 0) {
+                isGameRunning = false;
+                alert("OYUN BİTTİ! Skor: " + score);
+                location.reload();
             }
         }
 
         function animate() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (!isGameRunning) return;
+            ctx.fillStyle = '#000510';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Bölüm geçiş mesajı
-            if (showChapterMessage) {
-                ctx.fillStyle = "rgba(0,0,0,0.8)";
-                ctx.fillRect(0, canvas.height/2 - 60, canvas.width, 120);
-                ctx.fillStyle = "#00ffff";
-                ctx.font = "bold 40px Arial";
-                ctx.textAlign = "center";
-                ctx.fillText("BÖLÜM " + currentChapter, canvas.width/2, canvas.height/2 - 10);
-                ctx.fillStyle = "#fff";
-                ctx.font = "20px Arial";
-                ctx.fillText("Hazır ol!", canvas.width/2, canvas.height/2 + 30);
-                ctx.textAlign = "left";
-            }
-            
-            shields.forEach(s => drawShield(s));
+            // Yıldız efekti (basit)
+            ctx.fillStyle = '#fff';
+            for(let i=0; i<10; i++) ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 1, 1);
+
             drawPlayer(player.x, player.y);
             
-            ctx.fillStyle = powerLevel === 3 ? '#ff00ff' : powerLevel === 2 ? '#ff6600' : '#ff0';
+            ctx.fillStyle = '#0ff';
             bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
             
-            ctx.fillStyle = '#f00';
-            enemyBullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
-            
             enemies.forEach(e => drawEnemy(e.x, e.y));
-            if (boss) drawBoss(boss);
-            floatingPowerUps.forEach(p => drawFloatingPowerUp(p));
-            
+
             update();
             requestAnimationFrame(animate);
         }
 
-        spawnEnemies();
-        // Oyun başlangıç mesajı
-        showChapterMessage = true;
-        currentChapter = 1;
-        animate();
+        // Kalkanlar ve diğer detaylar için boş fonksiyon (isteğe bağlı eklenebilir)
+        function createShields() {}
+
     </script>
 </body>
 </html>
