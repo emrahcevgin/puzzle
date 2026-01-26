@@ -48,6 +48,7 @@ let jumps=0, playerJumping=false;
 let frame=0, score=0, running=true;
 const obstacles=[], stars=[];
 const baseSpeed=3;
+let obstacleTimer=0;
 
 /* Zıplama */
 function jump(){
@@ -69,7 +70,7 @@ function loop(){
   let timeFactor=frame/600;
   let speed=baseSpeed+Math.pow(timeFactor,1.5);
 
-  /* Yıldızlar */
+  /* YILDIZ ARKA PLAN */
   if(frame%10===0){
     const s=document.createElement("div");
     const size=Math.random()*2+1;
@@ -88,7 +89,7 @@ function loop(){
     if(s.offsetLeft<-10){s.remove();stars.splice(i,1);}
   }
 
-  /* Fizik */
+  /* FİZİK */
   vy-=gravity;
   y+=vy;
 
@@ -105,8 +106,12 @@ function loop(){
   ball.style.bottom=y+"px";
   ball.style.transform=`scale(${stretch},${squash})`;
 
-  /* Engel üret */
-  if(frame%140===0){
+  /* ENGEL SIKLIK EĞRİSİ */
+  let spawnInterval=140-Math.min(70,Math.floor(frame/500));
+  obstacleTimer++;
+
+  if(obstacleTimer>=spawnInterval){
+    obstacleTimer=0;
     let o=document.createElement("div");
     let type=Math.random();
 
