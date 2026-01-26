@@ -8,7 +8,7 @@
 <style>
 body{
   margin:0;
-  background:#111;
+  background:#000;
   color:#fff;
   font-family:Arial;
   display:flex;
@@ -20,52 +20,41 @@ body{
   position:relative;
   width:100%;
   max-width:600px;
-  height:300px;
-  background:linear-gradient(#1a1a1a,#222);
+  height:320px;
+  background:#000;
   overflow:hidden;
-  border:2px solid #444;
+  border:2px solid #333;
 }
 #ball{
   position:absolute;
-  width:20px;
-  height:20px;
+  width:18px;
+  height:18px;
   border-radius:50%;
-  background:#00ffcc;
-  left:60px;
-  bottom:40px;
+  background:#00ffd0;
+  left:70px;
 }
 #ground{
   position:absolute;
   bottom:0;
   height:40px;
-  width:200%;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      #333 0,
-      #333 40px,
-      #2a2a2a 40px,
-      #2a2a2a 80px
-    );
+  width:100%;
+  background:#222;
+}
+.star{
+  position:absolute;
+  background:#fff;
+  border-radius:50%;
 }
 .obstacle{
   position:absolute;
-  width:20px;
-  bottom:40px;
 }
-.low{ background:#ff5555; }
-.high{ background:#ff8844; }
-.top{
-  background:#55aaff;
-  top:40px;
-}
-.decor{
-  position:absolute;
-  width:6px;
-  height:6px;
-  border-radius:50%;
-  background:#555;
-  opacity:0.6;
+.vertical.low{background:#ff5555;width:18px;}
+.vertical.high{background:#ff8844;width:22px;}
+.top{background:#5599ff;width:22px;}
+.platform{
+  background:#55ff88;
+  height:10px;
+  border-radius:4px;
 }
 #score{
   position:absolute;
@@ -96,31 +85,35 @@ body{
 </div>
 
 <script>
-/* ===== STATE ===== */
-var game = document.getElementById("game");
-var ball = document.getElementById("ball");
-var ground = document.getElementById("ground");
-var scoreEl = document.getElementById("score");
-var gameOverEl = document.getElementById("gameover");
+/* ===== ELEMENTS ===== */
+const game = document.getElementById("game");
+const ball = document.getElementById("ball");
+const ground = document.getElementById("ground");
+const scoreEl = document.getElementById("score");
+const gameOverEl = document.getElementById("gameover");
 
-var y = 40;
-var velocity = 0;
-var gravity = 0.6;
-var jumpPower = 10;
+/* ===== PHYSICS ===== */
+let y = 80;
+let vy = 0;
+const gravity = 0.5;
+const jumpPower = 9;
+let onGround = false;
 
-var obstacles = [];
-var decors = [];
-
-var speed = 3;
-var frame = 0;
-var score = 0;
-var running = true;
-var groundX = 0;
+/* ===== GAME STATE ===== */
+let speed = 3;
+let frame = 0;
+let score = 0;
+let running = true;
+const obstacles = [];
+const stars = [];
 
 /* ===== INPUT ===== */
 function jump(){
   if(!running) return;
-  velocity = jumpPower;
+  if(onGround){
+    vy = jumpPower;
+    onGround = false;
+  }
 }
 game.addEventListener("click", jump);
 document.addEventListener("keydown", e=>{
@@ -133,82 +126,103 @@ function loop(){
   frame++;
 
   /* hız artışı */
-  if(frame % 600 === 0){
-    speed += 0.5;
+  if(frame % 700 === 0) speed += 0.4;
+
+  /* yıldız üret */
+  if(frame % 15 === 0){
+    const s = document.createElement("div");
+    const size = Math.random()*2 + 1;
+    s.className = "star";
+    s.style.width = size+"px";
+    s.style.height = size+"px";
+    s.style.right = "-5px";
+    s.style.top = Math.random()*200+"px";
+    s.dataset.speed = (Math.random()*0.5 + 0.2);
+    game.appendChild(s);
+    stars.push(s);
+  }
+
+  /* yıldız hareket */
+  for(let i=stars.length-1;i>=0;i--){
+    const s = stars[i];
+    s.style.left = (s.offsetLeft - speed*s.dataset.speed) + "px";
+    if(s.offsetLeft < -5){
+      s.remove();
+      stars.splice(i,1);
+    }
   }
 
   /* yerçekimi */
-  velocity -= gravity;
-  y += velocity;
-  if(y < 40){ y = 40; velocity = 0; }
-  ball.style.bottom = y + "px";
+  vy -= gravity;
+  y += vy;
+  onGround = false;
 
-  /* zemin kayma */
-  groundX -= speed;
-  ground.style.left = groundX + "px";
-  if(groundX < -600) groundX = 0;
-
-  /* dekor ekle */
-  if(frame % 50 === 0){
-    var d = document.createElement("div");
-    d.className = "decor";
-    d.style.right = "-10px";
-    d.style.bottom = (60 + Math.random()*160) + "px";
-    game.appendChild(d);
-    decors.push(d);
-  }
-
-  /* dekor hareket */
-  for(var i=decors.length-1;i>=0;i--){
-    var d = decors[i];
-    d.style.left = (d.offsetLeft - speed*0.5) + "px";
-    if(d.offsetLeft < -10){
-      d.remove();
-      decors.splice(i,1);
-    }
+  /* zemin çarpışma */
+  if(y <= 40){
+    y = 40;
+    vy = Math.sin(frame/10)*0.6; // küçük zıplama hissi
+    onGround = true;
   }
 
   /* engel üret */
   if(frame % 140 === 0){
-    var o = document.createElement("div");
-    var type = Math.random();
-    if(type < 0.4){
-      o.className = "obstacle low";
-      o.style.height = "30px";
-      o.style.bottom = "40px";
-    }else if(type < 0.75){
-      o.className = "obstacle high";
-      o.style.height = "60px";
-      o.style.bottom = "40px";
+    let o = document.createElement("div");
+    let type = Math.random();
+
+    if(type < 0.35){
+      o.className="obstacle vertical low";
+      o.style.height="30px";
+      o.style.bottom="40px";
+    }else if(type < 0.65){
+      o.className="obstacle vertical high";
+      o.style.height="70px";
+      o.style.bottom="40px";
+    }else if(type < 0.85){
+      o.className="obstacle top";
+      o.style.height="40px";
+      o.style.top="40px";
     }else{
-      o.className = "obstacle top";
-      o.style.height = "40px";
+      o.className="obstacle platform";
+      o.style.width="60px";
+      o.style.bottom=(80+Math.random()*60)+"px";
     }
-    o.style.right = "-20px";
+
+    o.style.right="-80px";
     game.appendChild(o);
     obstacles.push(o);
   }
 
-  /* engel hareket + çarpışma */
-  for(var i=obstacles.length-1;i>=0;i--){
-    var o = obstacles[i];
+  /* engel hareket & çarpışma */
+  for(let i=obstacles.length-1;i>=0;i--){
+    const o = obstacles[i];
     o.style.left = (o.offsetLeft - speed) + "px";
 
-    var ox = o.offsetLeft;
-    var ow = o.offsetWidth;
-    var oh = o.offsetHeight;
+    const bx = 70, bw = 18, by = y, bh = 18;
+    const ox = o.offsetLeft, ow = o.offsetWidth;
+    const oy = o.offsetTop, oh = o.offsetHeight;
 
-    if(
-      ox < 80 && ox + ow > 40 &&
-      (
-        (o.classList.contains("top") && y + 20 > game.clientHeight - oh) ||
-        (!o.classList.contains("top") && y < 40 + oh)
-      )
-    ){
-      endGame();
+    // platform üstüne çıkma
+    if(o.classList.contains("platform")){
+      if(
+        bx + bw > ox && bx < ox + ow &&
+        by > oy + oh - 8 && by < oy + oh + 4 &&
+        vy <= 0
+      ){
+        y = oy + oh;
+        vy = Math.sin(frame/10)*0.6;
+        onGround = true;
+      }
+    }else{
+      // çarpışma
+      if(
+        bx < ox + ow && bx + bw > ox &&
+        by < oy + oh && by + bh > oy
+      ){
+        endGame();
+      }
     }
 
-    if(ox < -30){
+    if(ox < -100){
       o.remove();
       obstacles.splice(i,1);
       score++;
@@ -216,17 +230,16 @@ function loop(){
     }
   }
 
+  ball.style.bottom = y + "px";
   requestAnimationFrame(loop);
 }
 
+/* ===== GAME OVER ===== */
 function endGame(){
   running = false;
   gameOverEl.style.display = "flex";
 }
-
-gameOverEl.addEventListener("click", ()=>{
-  location.reload();
-});
+gameOverEl.onclick = ()=>location.reload();
 
 loop();
 </script>
