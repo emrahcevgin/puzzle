@@ -11,10 +11,10 @@ body{margin:0;background:#000;color:#fff;font-family:Arial;display:flex;justify-
 #ball{position:absolute;width:18px;height:18px;border-radius:50%;background:#00ffd0;left:70px}
 #ground{position:absolute;bottom:0;height:40px;width:100%;background:#222}
 .star{position:absolute;background:#fff;border-radius:50%}
-.obstacle{position:absolute;bottom:40px}
-.vertical.low{background:#ff5555;width:18px;height:30px}
-.vertical.high{background:#ff8844;width:22px;height:70px}
-.top{background:#5599ff;width:22px;height:40px}
+.obstacle{position:absolute}
+.vertical.low{background:#ff5555;width:18px;height:30px;bottom:40px}
+.vertical.high{background:#ff8844;width:22px;height:70px;bottom:40px}
+.top{background:#5599ff;width:22px;height:40px;top:40px}
 .platform{background:#55ff88;height:10px;border-radius:4px}
 #score{position:absolute;top:10px;left:10px;font-size:18px}
 #gameover{position:absolute;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;font-size:24px;text-align:center}
@@ -22,7 +22,6 @@ body{margin:0;background:#000;color:#fff;font-family:Arial;display:flex;justify-
 </head>
 
 <body>
-
 <div id="game">
   <div id="score">Skor: 0</div>
   <div id="ball"></div>
@@ -40,7 +39,7 @@ let y = 80;
 let vy = 0;
 const gravity = 0.5;
 const jumpPower = 9;
-let jumps = 0; // çift zıplama sayacı
+let jumps = 0;
 
 let speed = 3;
 let frame = 0;
@@ -65,38 +64,15 @@ function loop(){
   if(!running) return;
   frame++;
 
-  if(frame % 700 === 0) speed += 0.4;
-
-  /* yıldızlar */
-  if(frame % 15 === 0){
-    const s=document.createElement("div");
-    const size=Math.random()*2+1;
-    s.className="star";
-    s.style.width=size+"px";
-    s.style.height=size+"px";
-    s.style.right="-5px";
-    s.style.top=Math.random()*200+"px";
-    s.dataset.speed=Math.random()*0.5+0.2;
-    game.appendChild(s);
-    stars.push(s);
-  }
-  for(let i=stars.length-1;i>=0;i--){
-    const s=stars[i];
-    s.style.left=(s.offsetLeft-speed*s.dataset.speed)+"px";
-    if(s.offsetLeft<-5){s.remove();stars.splice(i,1);}
-  }
-
-  /* fizik */
   vy -= gravity;
   y += vy;
 
   if(y <= 40){
     y = 40;
     vy = 0;
-    jumps = 0; // yere değince zıplama sıfırlanır
+    jumps = 0;
   }
 
-  /* engel üret */
   if(frame % 140 === 0){
     let o=document.createElement("div");
     let type=Math.random();
@@ -106,7 +82,6 @@ function loop(){
       o.className="obstacle vertical high";
     }else if(type<0.9){
       o.className="obstacle top";
-      o.style.bottom="140px";
     }else{
       o.className="obstacle platform";
       o.style.width="60px";
@@ -117,32 +92,32 @@ function loop(){
     obstacles.push(o);
   }
 
-  /* engeller */
   for(let i=obstacles.length-1;i>=0;i--){
     const o=obstacles[i];
     o.style.left=(o.offsetLeft-speed)+"px";
 
     const bx=70, bw=18, by=y, bh=18;
     const ox=o.offsetLeft, ow=o.offsetWidth;
-    const oy=parseFloat(o.style.bottom), oh=o.offsetHeight;
+    const oh=o.offsetHeight;
 
-    // platform üstünde durma
+    // bottom koordinatını hesapla
+    let obstacleBottom;
+    if(o.classList.contains("top")){
+      obstacleBottom = game.clientHeight - o.offsetTop - oh;
+    } else {
+      obstacleBottom = parseFloat(getComputedStyle(o).bottom);
+    }
+
     if(o.classList.contains("platform")){
-      if(
-        bx+bw>ox && bx<ox+ow &&
-        by <= oy+oh+5 && by >= oy+oh-10 &&
-        vy<=0
-      ){
-        y = oy+oh;
+      if(bx+bw>ox && bx<ox+ow &&
+         by <= obstacleBottom+oh+5 && by >= obstacleBottom+oh-10 && vy<=0){
+        y = obstacleBottom+oh;
         vy = 0;
         jumps = 0;
       }
-    }else{
-      // çarpışma
-      if(
-        bx < ox+ow && bx+bw > ox &&
-        by < oy+oh && by+bh > oy
-      ){
+    } else {
+      if(bx < ox+ow && bx+bw > ox &&
+         by < obstacleBottom+oh && by+bh > obstacleBottom){
         endGame();
       }
     }
@@ -167,6 +142,5 @@ gameOverEl.onclick=()=>location.reload();
 
 loop();
 </script>
-
 </body>
 </html>
