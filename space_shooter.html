@@ -1,159 +1,101 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Uzay Savaşı Pro</title>
+    <title>Uzay Savunma iOS</title>
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body, html { 
-            margin: 0; 
-            padding: 0;
-            width: 100%; 
-            height: 100%; 
-            overflow: hidden; 
-            background: #000;
-            position: fixed; /* Kaydırmayı tamamen engeller */
+            width: 100%; height: 100%; 
+            overflow: hidden; background: #000; 
+            position: fixed; touch-action: none;
         }
         canvas { 
-            display: block; 
-            width: 100vw; 
-            height: 100vh; 
-            object-fit: contain; 
+            display: block; width: 100%; height: 100%; 
         }
-        #ui { 
-            position: absolute; 
-            top: env(safe-area-inset-top, 20px); 
-            left: 20px; 
-            right: 20px;
-            pointer-events: none; 
-            color: #0f0;
-            font-family: sans-serif;
-            display: flex;
-            justify-content: space-between;
-            z-index: 10;
-        }
-        #start-overlay {
-            position: absolute;
-            inset: 0;
-            background: rgba(0,0,0,0.9);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 100;
-        }
-        .start-btn {
-            padding: 20px 50px;
-            font-size: 24px;
-            background: #00ffff;
-            border: none;
-            border-radius: 50px;
-            font-weight: bold;
+        #ui {
+            position: absolute; top: 40px; left: 20px;
+            color: #0f0; font-family: monospace; font-size: 20px;
+            pointer-events: none; z-index: 5;
         }
     </style>
 </head>
 <body>
-    <div id="ui">
-        <span>PUAN: <span id="score">0</span></span>
-        <span>CAN: <span id="lives">3</span></span>
-    </div>
-    <div id="start-overlay" id="overlay">
-        <button class="start-btn" onclick="initGame()">OYUNA BAŞLA</button>
-    </div>
+    <div id="ui">SKOR: <span id="score">0</span></div>
     <canvas id="gameCanvas"></canvas>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        let isRunning = false;
+        const scoreEl = document.getElementById('score');
 
-        // EKRAN BOYUTLANDIRMA (RETINA DESTEĞİ)
-        function resize() {
-            const dpr = window.devicePixelRatio || 1;
-            canvas.width = window.innerWidth * dpr;
-            canvas.height = window.innerHeight * dpr;
-            ctx.scale(dpr, dpr);
-            
-            // Oyuncu konumunu resetle
-            player.x = window.innerWidth / 2 - 20;
-            player.y = window.innerHeight - 100;
-        }
-
-        const player = { x: 0, y: 0, w: 40, h: 40 };
-        let enemies = [];
+        let player = { x: 0, y: 0, w: 50, h: 50 };
         let bullets = [];
+        let enemies = [];
         let score = 0;
-        let lives = 3;
 
-        function initGame() {
-            document.getElementById('start-overlay').style.display = 'none';
-            isRunning = true;
-            resize();
-            spawnEnemy();
-            animate();
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            player.x = canvas.width / 2 - player.w / 2;
+            player.y = canvas.height - 100;
         }
 
-        // KONTROLLER (PARMAK TAKİBİ)
+        // Hareketi doğrudan parmağa bağla (iPhone için en akıcı yöntem)
         window.addEventListener('touchmove', (e) => {
-            if (!isRunning) return;
             const touch = e.touches[0];
-            // Gemiyi tam parmağın üzerine değil, biraz üstüne koyar (görmeniz için)
             player.x = touch.clientX - player.w / 2;
-            player.y = touch.clientY - player.h - 30; 
+            player.y = touch.clientY - player.h / 2;
+            
+            // Ekran sınırları
+            if (player.x < 0) player.x = 0;
+            if (player.x > canvas.width - player.w) player.x = canvas.width - player.w;
         }, { passive: false });
 
-        function spawnEnemy() {
-            if (!isRunning) return;
+        function createEnemy() {
             enemies.push({
-                x: Math.random() * (window.innerWidth - 40),
+                x: Math.random() * (canvas.width - 40),
                 y: -50,
-                w: 30,
-                h: 30,
-                speed: 2 + (score / 100)
+                w: 40, h: 40,
+                speed: 3 + Math.random() * 2
             });
-            setTimeout(spawnEnemy, 1000 - Math.min(score, 500));
         }
 
         function update() {
-            // Mermiler
-            if (Date.now() % 150 < 20) { // Otomatik ateş hızı
-                bullets.push({ x: player.x + player.w/2 - 2, y: player.y, w: 5, h: 15 });
+            // Otomatik Ateş
+            if (Math.random() < 0.1) {
+                bullets.push({ x: player.x + player.w / 2 - 2, y: player.y, w: 4, h: 15 });
             }
 
             bullets.forEach((b, i) => {
-                b.y -= 10;
+                b.y -= 8;
                 if (b.y < 0) bullets.splice(i, 1);
             });
 
-            // Düşmanlar
             enemies.forEach((e, i) => {
                 e.y += e.speed;
                 
-                // Vurulma kontrolü
+                // Mermi-Düşman Çarpışması
                 bullets.forEach((b, bi) => {
                     if (b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
                         enemies.splice(i, 1);
                         bullets.splice(bi, 1);
                         score += 10;
-                        document.getElementById('score').innerText = score;
+                        scoreEl.innerText = score;
                     }
                 });
 
-                // Kaçırma veya Çarpışma
-                if (e.y > window.innerHeight || (e.x < player.x + player.w && e.x + e.w > player.x && e.y < player.y + player.h && e.y + e.h > player.y)) {
-                    enemies.splice(i, 1);
-                    lives--;
-                    document.getElementById('lives').innerText = lives;
-                    if (lives <= 0) location.reload();
-                }
+                if (e.y > canvas.height) enemies.splice(i, 1);
             });
         }
 
-        function animate() {
+        function draw() {
             ctx.fillStyle = '#000510';
-            ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Oyuncu Çizimi (Gelişmiş)
-            ctx.fillStyle = '#00ffff';
+            // Gemi
+            ctx.fillStyle = '#00ff00';
             ctx.fillRect(player.x, player.y, player.w, player.h);
 
             // Mermiler
@@ -161,14 +103,20 @@
             bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
 
             // Düşmanlar
-            ctx.fillStyle = '#f0f';
+            ctx.fillStyle = '#f00';
             enemies.forEach(e => ctx.fillRect(e.x, e.y, e.w, e.h));
-
-            update();
-            requestAnimationFrame(animate);
         }
 
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        setInterval(createEnemy, 1000);
         window.addEventListener('resize', resize);
+        resize();
+        gameLoop();
     </script>
 </body>
 </html>
