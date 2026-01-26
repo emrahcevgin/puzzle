@@ -6,7 +6,7 @@
 <title>Block Puzzle Engine</title>
 
 <style>
-body {
+body{
   margin:0;
   background:#111;
   color:#fff;
@@ -15,20 +15,20 @@ body {
   flex-direction:column;
   align-items:center;
 }
-#top { padding:10px }
-#board {
+#top{padding:10px}
+#board{
   position:relative;
   background:#000;
   border:2px solid #333;
   touch-action:none;
 }
-.block-piece {
+.block-piece{
   position:absolute;
   border:1px solid #222;
   background-repeat:no-repeat;
   transition:left .2s, top .2s;
 }
-.block-piece.dragging {
+.block-piece.dragging{
   transition:none;
   z-index:10;
 }
@@ -49,7 +49,7 @@ var COLS = 5;
 
 /* ===== STATE ===== */
 var PW, PH;
-var blocks = []; // BLOCK = { id, pieces:[{cx,cy,x,y,el}] }
+var blocks = [];
 var draggingBlock = null;
 var pointerId = null;
 var ox = 0, oy = 0;
@@ -58,7 +58,7 @@ var ox = 0, oy = 0;
 var board = document.getElementById("board");
 var input = document.getElementById("file");
 
-/* ===== LOAD IMAGE ===== */
+/* ===== IMAGE LOAD ===== */
 input.onchange = function(){
   var f = input.files[0];
   if(!f) return;
@@ -73,15 +73,27 @@ function init(src){
 
   var img=new Image();
   img.onload=function(){
-    var W=Math.floor(innerWidth*0.95);
-    var H=W*(img.height/img.width);
-    PW=W/COLS;
-    PH=H/ROWS;
 
-    board.style.width=W+"px";
-    board.style.height=H+"px";
+    /* === BOARD SIZE (EKRANA SIĞDIR) === */
+    var maxW = window.innerWidth * 0.95;
+    var maxH = window.innerHeight * 0.7;
+    var ratio = img.width / img.height;
 
-    var id=0;
+    var W = maxW;
+    var H = W / ratio;
+    if(H > maxH){
+      H = maxH;
+      W = H * ratio;
+    }
+
+    PW = W / COLS;
+    PH = H / ROWS;
+
+    board.style.width = W + "px";
+    board.style.height = H + "px";
+
+    /* === CREATE PIECES === */
+    var id = 0;
     for(var y=0;y<ROWS;y++){
       for(var x=0;x<COLS;x++){
         var el=document.createElement("div");
@@ -91,8 +103,6 @@ function init(src){
         el.style.backgroundImage="url("+src+")";
         el.style.backgroundSize=W+"px "+H+"px";
         el.style.backgroundPosition=(-x*PW)+"px "+(-y*PH)+"px";
-        el.style.left=(x*PW)+"px";
-        el.style.top =(y*PH)+"px";
         board.appendChild(el);
 
         var piece={cx:x,cy:y,x:x,y:y,el:el};
@@ -106,14 +116,14 @@ function init(src){
       }
     }
 
-    shuffleBlocks();
+    shuffle();
     drawAll();
   };
   img.src=src;
 }
 
 /* ===== SHUFFLE ===== */
-function shuffleBlocks(){
+function shuffle(){
   var cells=[];
   for(var y=0;y<ROWS;y++)
     for(var x=0;x<COLS;x++)
@@ -133,9 +143,11 @@ function startDrag(e,block,piece){
   pointerId=e.pointerId;
   draggingBlock=block;
 
-  var r=piece.el.getBoundingClientRect();
-  ox=e.clientX-r.left;
-  oy=e.clientY-r.top;
+  var boardRect = board.getBoundingClientRect();
+  var pieceRect = piece.el.getBoundingClientRect();
+
+  ox = e.clientX - pieceRect.left;
+  oy = e.clientY - pieceRect.top;
 
   block.pieces.forEach(function(p){
     p.el.classList.add("dragging");
@@ -145,14 +157,16 @@ function startDrag(e,block,piece){
 }
 
 board.onpointermove=function(e){
-  if(!draggingBlock||e.pointerId!==pointerId) return;
+  if(!draggingBlock || e.pointerId!==pointerId) return;
 
-  var base=draggingBlock.pieces[0];
+  var boardRect = board.getBoundingClientRect();
+  var base = draggingBlock.pieces[0];
+
   draggingBlock.pieces.forEach(function(p){
-    p.el.style.left=
-      e.clientX-board.offsetLeft-ox+(p.x-base.x)*PW+"px";
+    p.el.style.left =
+      (e.clientX - boardRect.left - ox + (p.x-base.x)*PW) + "px";
     p.el.style.top =
-      e.clientY-board.offsetTop -oy+(p.y-base.y)*PH+"px";
+      (e.clientY - boardRect.top - oy + (p.y-base.y)*PH) + "px";
   });
 };
 
@@ -163,18 +177,20 @@ board.onpointercancel=endDrag;
 function endDrag(){
   if(!draggingBlock) return;
 
-  var base=draggingBlock.pieces[0];
-  var nx=Math.round(base.el.offsetLeft/PW);
-  var ny=Math.round(base.el.offsetTop /PH);
+  var base = draggingBlock.pieces[0];
+  var boardRect = board.getBoundingClientRect();
+
+  var nx = Math.round((base.el.offsetLeft) / PW);
+  var ny = Math.round((base.el.offsetTop)  / PH);
 
   draggingBlock.pieces.forEach(function(p){
-    p.x=nx+(p.x-base.x);
-    p.y=ny+(p.y-base.y);
+    p.x = nx + (p.x-base.x);
+    p.y = ny + (p.y-base.y);
     p.el.classList.remove("dragging");
   });
 
-  draggingBlock=null;
-  pointerId=null;
+  draggingBlock = null;
+  pointerId = null;
 
   mergeBlocks();
   drawAll();
@@ -187,9 +203,9 @@ function mergeBlocks(){
       if(i===j) continue;
       var A=blocks[i], B=blocks[j];
       if(canMerge(A,B)){
-        A.pieces=A.pieces.concat(B.pieces);
+        A.pieces = A.pieces.concat(B.pieces);
         blocks.splice(j,1);
-        return mergeBlocks(); // recursive until stable
+        return mergeBlocks();
       }
     }
   }
