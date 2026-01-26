@@ -9,25 +9,44 @@
 body{margin:0;background:#000;color:#fff;font-family:Arial;display:flex;justify-content:center;align-items:center;height:100vh}
 #game{position:relative;width:100%;max-width:600px;height:320px;background:#000;overflow:hidden;border:2px solid #333}
 
-/* 🚀 UZAY GEMİSİ */
+/* 🚀 GEMİ */
 #ship{
   position:absolute;
-  width:0;height:0;
-  border-left:10px solid transparent;
-  border-right:10px solid transparent;
-  border-bottom:18px solid #00ffd0;
-  left:70px;
+  width:28px;
+  height:28px;
+  left:60px;
   z-index:3;
+  transform-origin:center bottom;
+  transition:transform 0.08s linear;
 }
 
-/* Alev efekti */
-.thrust{
-  filter:drop-shadow(0 6px 6px orange);
+.body{
+  position:absolute;bottom:0;left:6px;width:16px;height:20px;
+  background:linear-gradient(#b0eaff,#00aaff);
+  clip-path:polygon(50% 0%,100% 100%,0% 100%);
 }
+
+.cockpit{
+  position:absolute;bottom:12px;left:9px;width:10px;height:8px;
+  background:#66ccff;border-radius:50% 50% 40% 40%;
+}
+
+.wing{position:absolute;bottom:6px;width:10px;height:8px;background:#0099cc;}
+.wing.left{left:0;clip-path:polygon(100% 0,0 50%,100% 100%);}
+.wing.right{right:0;clip-path:polygon(0 0,100% 50%,0 100%);}
+
+.flame{
+  position:absolute;bottom:-8px;left:12px;width:4px;height:10px;
+  background:linear-gradient(orange,red);
+  border-radius:50%;
+  opacity:0;
+}
+.thrust .flame{opacity:1;transform:scaleY(1.4);}
+
+/* Arka plan */
+.star{position:absolute;background:#fff;border-radius:50%;opacity:.8}
 
 #ground{position:absolute;bottom:0;height:40px;width:100%;background:#111;z-index:2}
-
-.star{position:absolute;background:#fff;border-radius:50%;opacity:.8}
 .obstacle{position:absolute;z-index:3}
 .vertical.low{background:#ff5555;width:18px;height:30px;bottom:40px}
 .vertical.high{background:#ff8844;width:22px;height:70px;bottom:40px}
@@ -43,7 +62,13 @@ body{margin:0;background:#000;color:#fff;font-family:Arial;display:flex;justify-
 <body>
 <div id="game">
   <div id="score">Skor: 0</div>
-  <div id="ship"></div>
+  <div id="ship">
+    <div class="body"></div>
+    <div class="cockpit"></div>
+    <div class="wing left"></div>
+    <div class="wing right"></div>
+    <div class="flame"></div>
+  </div>
   <div id="ground"></div>
   <div id="gameover">Oyun Bitti<br>Tekrar başlamak için tıkla</div>
 </div>
@@ -63,14 +88,14 @@ const obstacles=[], stars=[];
 const baseSpeed=3;
 let obstacleTimer=0;
 
-/* Zıplama (itki) */
+/* Zıplama */
 function jump(){
   if(!running) return;
   if(jumps<2){
     vy=jumpPower;
     jumps++;
     ship.classList.add("thrust");
-    setTimeout(()=>ship.classList.remove("thrust"),100);
+    setTimeout(()=>ship.classList.remove("thrust"),120);
   }
 }
 game.addEventListener("click",jump);
@@ -81,8 +106,7 @@ function loop(){
   frame++;
 
   /* HIZ EĞRİSİ */
-  let timeFactor=frame/600;
-  let speed=baseSpeed+Math.pow(timeFactor,1.5);
+  let speed=baseSpeed+Math.pow(frame/600,1.5);
 
   /* YILDIZLAR */
   if(frame%10===0){
@@ -106,19 +130,17 @@ function loop(){
   /* FİZİK */
   vy-=gravity;
   y+=vy;
-
-  if(y<=40){
-    y=40;
-    vy=0;
-    jumps=0;
-  }
+  if(y<=40){y=40;vy=0;jumps=0;}
 
   ship.style.bottom=y+"px";
 
-  /* ENGEL SIKLIĞI ARTIŞI */
+  /* ✈️ UÇUŞ AÇISI */
+  let angle=vy*3; // yukarı çıkarken burun yukarı
+  ship.style.transform=`rotate(${angle}deg)`;
+
+  /* ENGEL SIKLIK ARTIŞI */
   let spawnInterval=140-Math.min(70,Math.floor(frame/500));
   obstacleTimer++;
-
   if(obstacleTimer>=spawnInterval){
     obstacleTimer=0;
     let o=document.createElement("div");
