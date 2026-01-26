@@ -21,7 +21,7 @@ body{
   width:100%;
   max-width:600px;
   height:300px;
-  background:#222;
+  background:linear-gradient(#1a1a1a,#222);
   overflow:hidden;
   border:2px solid #444;
 }
@@ -34,18 +34,38 @@ body{
   left:60px;
   bottom:40px;
 }
-.obstacle{
-  position:absolute;
-  width:20px;
-  background:#ff5555;
-  bottom:40px;
-}
 #ground{
   position:absolute;
   bottom:0;
   height:40px;
-  width:100%;
-  background:#333;
+  width:200%;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #333 0,
+      #333 40px,
+      #2a2a2a 40px,
+      #2a2a2a 80px
+    );
+}
+.obstacle{
+  position:absolute;
+  width:20px;
+  bottom:40px;
+}
+.low{ background:#ff5555; }
+.high{ background:#ff8844; }
+.top{
+  background:#55aaff;
+  top:40px;
+}
+.decor{
+  position:absolute;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#555;
+  opacity:0.6;
 }
 #score{
   position:absolute;
@@ -57,11 +77,11 @@ body{
   position:absolute;
   inset:0;
   background:rgba(0,0,0,.7);
-  display:flex;
+  display:none;
   align-items:center;
   justify-content:center;
   font-size:24px;
-  display:none;
+  text-align:center;
 }
 </style>
 </head>
@@ -72,13 +92,14 @@ body{
   <div id="score">Skor: 0</div>
   <div id="ball"></div>
   <div id="ground"></div>
-  <div id="gameover">Oyun Bitti<br>Yeniden başlamak için tıkla</div>
+  <div id="gameover">Oyun Bitti<br>Tekrar başlamak için tıkla</div>
 </div>
 
 <script>
 /* ===== STATE ===== */
-var ball = document.getElementById("ball");
 var game = document.getElementById("game");
+var ball = document.getElementById("ball");
+var ground = document.getElementById("ground");
 var scoreEl = document.getElementById("score");
 var gameOverEl = document.getElementById("gameover");
 
@@ -88,17 +109,19 @@ var gravity = 0.6;
 var jumpPower = 10;
 
 var obstacles = [];
+var decors = [];
+
 var speed = 3;
 var frame = 0;
 var score = 0;
 var running = true;
+var groundX = 0;
 
 /* ===== INPUT ===== */
 function jump(){
   if(!running) return;
   velocity = jumpPower;
 }
-
 game.addEventListener("click", jump);
 document.addEventListener("keydown", e=>{
   if(e.code==="Space") jump();
@@ -107,44 +130,87 @@ document.addEventListener("keydown", e=>{
 /* ===== LOOP ===== */
 function loop(){
   if(!running) return;
-
   frame++;
 
-  // gravity
+  /* hız artışı */
+  if(frame % 600 === 0){
+    speed += 0.5;
+  }
+
+  /* yerçekimi */
   velocity -= gravity;
   y += velocity;
   if(y < 40){ y = 40; velocity = 0; }
-
   ball.style.bottom = y + "px";
 
-  // spawn obstacle
-  if(frame % 120 === 0){
+  /* zemin kayma */
+  groundX -= speed;
+  ground.style.left = groundX + "px";
+  if(groundX < -600) groundX = 0;
+
+  /* dekor ekle */
+  if(frame % 50 === 0){
+    var d = document.createElement("div");
+    d.className = "decor";
+    d.style.right = "-10px";
+    d.style.bottom = (60 + Math.random()*160) + "px";
+    game.appendChild(d);
+    decors.push(d);
+  }
+
+  /* dekor hareket */
+  for(var i=decors.length-1;i>=0;i--){
+    var d = decors[i];
+    d.style.left = (d.offsetLeft - speed*0.5) + "px";
+    if(d.offsetLeft < -10){
+      d.remove();
+      decors.splice(i,1);
+    }
+  }
+
+  /* engel üret */
+  if(frame % 140 === 0){
     var o = document.createElement("div");
-    o.className = "obstacle";
-    o.style.height = (30 + Math.random()*40) + "px";
+    var type = Math.random();
+    if(type < 0.4){
+      o.className = "obstacle low";
+      o.style.height = "30px";
+      o.style.bottom = "40px";
+    }else if(type < 0.75){
+      o.className = "obstacle high";
+      o.style.height = "60px";
+      o.style.bottom = "40px";
+    }else{
+      o.className = "obstacle top";
+      o.style.height = "40px";
+    }
     o.style.right = "-20px";
     game.appendChild(o);
     obstacles.push(o);
   }
 
-  // move obstacles
+  /* engel hareket + çarpışma */
   for(var i=obstacles.length-1;i>=0;i--){
     var o = obstacles[i];
-    var x = o.offsetLeft - speed;
-    o.style.left = x + "px";
+    o.style.left = (o.offsetLeft - speed) + "px";
 
-    // collision
+    var ox = o.offsetLeft;
+    var ow = o.offsetWidth;
+    var oh = o.offsetHeight;
+
     if(
-      x < 80 && x > 40 &&
-      y < 40 + o.offsetHeight
+      ox < 80 && ox + ow > 40 &&
+      (
+        (o.classList.contains("top") && y + 20 > game.clientHeight - oh) ||
+        (!o.classList.contains("top") && y < 40 + oh)
+      )
     ){
       endGame();
     }
 
-    // passed
-    if(x < -30){
-      obstacles.splice(i,1);
+    if(ox < -30){
       o.remove();
+      obstacles.splice(i,1);
       score++;
       scoreEl.textContent = "Skor: " + score;
     }
