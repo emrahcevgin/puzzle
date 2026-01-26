@@ -43,11 +43,11 @@ const gameOverEl=document.getElementById("gameover");
 let y=80, vy=0;
 const gravity=0.5, jumpPower=9;
 const idleBouncePower=1.2;
-let jumps=0;
-let playerJumping=false;
+let jumps=0, playerJumping=false;
 
-let speed=3, frame=0, score=0, running=true;
+let frame=0, score=0, running=true;
 const obstacles=[], stars=[];
+const baseSpeed=3;
 
 /* Zıplama */
 function jump(){
@@ -64,6 +64,10 @@ document.addEventListener("keydown",e=>{if(e.code==="Space")jump();});
 function loop(){
   if(!running) return;
   frame++;
+
+  /* HIZ EĞRİSİ */
+  let timeFactor=frame/600;
+  let speed=baseSpeed+Math.pow(timeFactor,1.5);
 
   /* Yıldızlar */
   if(frame%10===0){
@@ -93,20 +97,10 @@ function loop(){
   if(y<=40){
     y=40;
     jumps=0;
-
-    if(playerJumping){
-      vy=0;
-      playerJumping=false;
-    } else {
-      vy=idleBouncePower;
-    }
-
-    squash=1.3;
-    stretch=0.8;
-  } else {
-    stretch=1.1;
-    squash=0.9;
-  }
+    if(playerJumping){vy=0;playerJumping=false;}
+    else vy=idleBouncePower;
+    squash=1.3; stretch=0.8;
+  } else {stretch=1.1; squash=0.9;}
 
   ball.style.bottom=y+"px";
   ball.style.transform=`scale(${stretch},${squash})`;
