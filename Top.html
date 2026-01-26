@@ -8,7 +8,12 @@
 <style>
 body{margin:0;background:#000;color:#fff;font-family:Arial;display:flex;justify-content:center;align-items:center;height:100vh}
 #game{position:relative;width:100%;max-width:600px;height:320px;background:#000;overflow:hidden;border:2px solid #333}
-#ball{position:absolute;width:18px;height:18px;border-radius:50%;background:#00ffd0;left:70px;z-index:3}
+#ball{
+  position:absolute;
+  width:18px;height:18px;border-radius:50%;
+  background:#00ffd0;left:70px;z-index:3;
+  transform-origin:center bottom;
+}
 #ground{position:absolute;bottom:0;height:40px;width:100%;background:#222;z-index:2}
 .star{position:absolute;background:#fff;border-radius:50%;opacity:.8}
 .obstacle{position:absolute;z-index:3}
@@ -30,20 +35,17 @@ body{margin:0;background:#000;color:#fff;font-family:Arial;display:flex;justify-
 </div>
 
 <script>
-const game = document.getElementById("game");
-const ball = document.getElementById("ball");
-const scoreEl = document.getElementById("score");
-const gameOverEl = document.getElementById("gameover");
+const game=document.getElementById("game");
+const ball=document.getElementById("ball");
+const scoreEl=document.getElementById("score");
+const gameOverEl=document.getElementById("gameover");
 
 let y=80, vy=0;
-const gravity=0.5;
-const jumpPower=9;
-const idleBounce=1.2; // minik otomatik zıplama
+const gravity=0.5, jumpPower=9;
 let jumps=0;
 
 let speed=3, frame=0, score=0, running=true;
-const obstacles=[];
-const stars=[];
+const obstacles=[], stars=[];
 
 function jump(){
   if(!running) return;
@@ -52,49 +54,26 @@ function jump(){
     jumps++;
   }
 }
-game.addEventListener("click", jump);
-document.addEventListener("keydown", e=>{ if(e.code==="Space") jump(); });
+game.addEventListener("click",jump);
+document.addEventListener("keydown",e=>{if(e.code==="Space")jump();});
 
 function loop(){
   if(!running) return;
   frame++;
 
-  /* yıldızlar */
-  if(frame%10===0){
-    const s=document.createElement("div");
-    const size=Math.random()*2+1;
-    s.className="star";
-    s.style.width=size+"px";
-    s.style.height=size+"px";
-    s.style.top=Math.random()*250+"px";
-    s.style.right="-5px";
-    s.dataset.speed=Math.random()*1+0.3;
-    game.appendChild(s);
-    stars.push(s);
-  }
-  for(let i=stars.length-1;i>=0;i--){
-    const s=stars[i];
-    s.style.left=(s.offsetLeft-speed*s.dataset.speed)+"px";
-    if(s.offsetLeft<-10){s.remove();stars.splice(i,1);}
-  }
-
   /* fizik */
   vy-=gravity;
   y+=vy;
-
-  if(y<=40){
-    y=40;
-    if(Math.abs(vy)<0.5){ // oyuncu zıplamıyorsa minik sekme
-      vy=idleBounce;
-    }else{
-      vy=0;
-    }
-    jumps=0;
-  }
+  if(y<=40){y=40;vy=0;jumps=0;}
 
   ball.style.bottom=y+"px";
 
-  /* engeller */
+  /* squash stretch */
+  let scaleY=1+vy*0.05;
+  let scaleX=1-(vy*0.03);
+  ball.style.transform=`scale(${scaleX},${scaleY})`;
+
+  /* engel üret */
   if(frame%140===0){
     let o=document.createElement("div");
     let type=Math.random();
@@ -122,7 +101,7 @@ function loop(){
       if(ballRect.right>rect.left &&
          ballRect.left<rect.right &&
          ballRect.bottom>=rect.top &&
-         ballRect.bottom<=rect.top+5 && // DARALTILDI
+         ballRect.bottom<=rect.top+5 &&
          vy<=0){
         y=rect.top-game.getBoundingClientRect().top-18;
         vy=0;
