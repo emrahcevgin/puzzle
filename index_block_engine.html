@@ -6,37 +6,17 @@
 <title>Block Puzzle Engine</title>
 
 <style>
-body{
-  margin:0;
-  background:#111;
-  color:#fff;
-  font-family:Arial;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-}
+body{margin:0;background:#111;color:#fff;font-family:Arial;display:flex;flex-direction:column;align-items:center}
 #top{padding:10px}
-#board{
-  position:relative;
-  background:#000;
-  border:2px solid #333;
-  touch-action:none;
-}
-.block-piece{
-  position:absolute;
-  border:1px solid #222;
-  background-repeat:no-repeat;
-  transition:left .2s, top .2s;
-}
+#board{position:relative;background:#000;border:2px solid #333;touch-action:none}
+.block-piece{position:absolute;border:1px solid #222;background-repeat:no-repeat;transition:left .2s,top .2s}
 .block-piece.dragging{transition:none;z-index:10}
 </style>
 </head>
 
 <body>
 
-<div id="top">
-  <input type="file" id="file" accept="image/*">
-</div>
+<div id="top"><input type="file" id="file" accept="image/*"></div>
 <div id="board"></div>
 
 <script>
@@ -45,12 +25,11 @@ var ROWS=3, COLS=5;
 
 /* ===== STATE ===== */
 var PW,PH;
-var blocks=[]; // {id, pieces:[{cx,cy,x,y,el}]}
+var blocks=[];
 var draggingBlock=null;
 var pointerId=null;
-var ox=0, oy=0;
+var ox=0,oy=0;
 
-/* ===== DOM ===== */
 var board=document.getElementById("board");
 var input=document.getElementById("file");
 
@@ -72,11 +51,10 @@ function init(src){
     var maxW=innerWidth*0.95;
     var maxH=innerHeight*0.7;
     var ratio=img.width/img.height;
-    var W=maxW, H=W/ratio;
-    if(H>maxH){ H=maxH; W=H*ratio; }
+    var W=maxW,H=W/ratio;
+    if(H>maxH){H=maxH;W=H*ratio;}
 
-    PW=W/COLS;
-    PH=H/ROWS;
+    PW=W/COLS; PH=H/ROWS;
     board.style.width=W+"px";
     board.style.height=H+"px";
 
@@ -102,14 +80,14 @@ function init(src){
       }
     }
 
-    shuffleBlocks();
-    drawAll();
+    shuffle();
+    draw();
   };
   img.src=src;
 }
 
 /* ===== SHUFFLE ===== */
-function shuffleBlocks(){
+function shuffle(){
   var cells=[];
   for(var y=0;y<ROWS;y++)
     for(var x=0;x<COLS;x++)
@@ -127,34 +105,29 @@ function startDrag(e,block,piece){
   pointerId=e.pointerId;
   draggingBlock=block;
 
-  var rect=piece.el.getBoundingClientRect();
-  ox=e.clientX-rect.left;
-  oy=e.clientY-rect.top;
+  var r=piece.el.getBoundingClientRect();
+  ox=e.clientX-r.left;
+  oy=e.clientY-r.top;
 
-  block.pieces.forEach(function(p){
-    p.el.classList.add("dragging");
-  });
-
+  block.pieces.forEach(function(p){p.el.classList.add("dragging");});
   piece.el.setPointerCapture(pointerId);
 }
 
 board.onpointermove=function(e){
   if(!draggingBlock||e.pointerId!==pointerId) return;
-  var boardRect=board.getBoundingClientRect();
+  var rect=board.getBoundingClientRect();
   var base=draggingBlock.pieces[0];
 
   draggingBlock.pieces.forEach(function(p){
-    p.el.style.left=
-      e.clientX-boardRect.left-ox+(p.x-base.x)*PW+"px";
-    p.el.style.top =
-      e.clientY-boardRect.top -oy+(p.y-base.y)*PH+"px";
+    p.el.style.left=(e.clientX-rect.left-ox+(p.x-base.x)*PW)+"px";
+    p.el.style.top =(e.clientY-rect.top -oy+(p.y-base.y)*PH)+"px";
   });
 };
 
 board.onpointerup=endDrag;
 board.onpointercancel=endDrag;
 
-/* ===== DROP + BLOCK KAYMA ===== */
+/* ===== DROP (FOOTPRINT SAFE) ===== */
 function endDrag(){
   if(!draggingBlock) return;
 
@@ -162,24 +135,44 @@ function endDrag(){
   var nx=Math.round(base.el.offsetLeft/PW);
   var ny=Math.round(base.el.offsetTop /PH);
 
-  var targets=[];
-  draggingBlock.pieces.forEach(function(p){
-    targets.push({p:p,x:nx+(p.x-base.x),y:ny+(p.y-base.y)});
+  var targets=draggingBlock.pieces.map(function(p){
+    return {p:p,x:nx+(p.x-base.x),y:ny+(p.y-base.y)};
   });
 
-  var occ=buildOccupancy(draggingBlock);
+  var occ=buildOcc();
 
+  // ÇAKIŞAN BLOCKLARI TESPİT ET
+  var conflicts=[];
   targets.forEach(function(t){
-    var hit=occ[t.y] && occ[t.y][t.x];
-    if(hit && hit!==draggingBlock){
-      shiftBlock(hit,occ);
+    var b=occ[t.y]&&occ[t.y][t.x];
+    if(b && b!==draggingBlock && conflicts.indexOf(b)===-1){
+      conflicts.push(b);
     }
   });
 
+  // HER ÇAKIŞAN BLOCK'U GÜVENLİ YERE TAŞI
+  conflicts.forEach(function(b){
+    var pos=findSafePosition(b,occ);
+    if(pos){
+      moveBlock(b,pos,occ);
+    }
+  });
+
+  // Drag edilen block için alan hâlâ doluysa → GERİ AL
+  for(var i=0;i<targets.length;i++){
+    if(occ[targets[i].y][targets[i].x]){
+      draggingBlock.pieces.forEach(function(p){
+        p.el.classList.remove("dragging");
+      });
+      draggingBlock=null; pointerId=null;
+      draw();
+      return;
+    }
+  }
+
+  // YERLEŞTİR
   targets.forEach(function(t){
-    t.p.x=t.x;
-    t.p.y=t.y;
-    occ[t.y][t.x]=draggingBlock;
+    t.p.x=t.x; t.p.y=t.y;
   });
 
   draggingBlock.pieces.forEach(function(p){
@@ -189,19 +182,18 @@ function endDrag(){
   draggingBlock=null;
   pointerId=null;
 
-  mergeBlocks();
-  drawAll();
+  merge();
+  draw();
 }
 
 /* ===== OCCUPANCY ===== */
-function buildOccupancy(ignore){
+function buildOcc(){
   var o=[];
   for(var y=0;y<ROWS;y++){
     o[y]=[];
     for(var x=0;x<COLS;x++) o[y][x]=null;
   }
   blocks.forEach(function(b){
-    if(b===ignore) return;
     b.pieces.forEach(function(p){
       o[p.y][p.x]=b;
     });
@@ -209,39 +201,42 @@ function buildOccupancy(ignore){
   return o;
 }
 
-/* ===== SHIFT BLOCK ===== */
-function shiftBlock(block,occ){
-  var cells=[];
-  for(var y=0;y<ROWS;y++)
-    for(var x=0;x<COLS;x++)
-      if(!occ[y][x]) cells.push({x:x,y:y});
+/* ===== SAFE POSITION ===== */
+function findSafePosition(block,occ){
+  for(var y=0;y<ROWS;y++){
+    for(var x=0;x<COLS;x++){
+      var ok=true;
+      for(var i=0;i<block.pieces.length;i++){
+        var p=block.pieces[i];
+        var tx=x+(p.x-block.pieces[0].x);
+        var ty=y+(p.y-block.pieces[0].y);
+        if(tx<0||tx>=COLS||ty<0||ty>=ROWS||occ[ty][tx]){
+          ok=false; break;
+        }
+      }
+      if(ok) return {x:x,y:y};
+    }
+  }
+  return null;
+}
 
-  if(!cells.length) return;
-
+function moveBlock(block,pos,occ){
   var base=block.pieces[0];
-  var dest=cells[0];
-
   block.pieces.forEach(function(p){
-    occ[p.y][p.x]=null;
-    p.x=dest.x+(p.x-base.x);
-    p.y=dest.y+(p.y-base.y);
-  });
-
-  block.pieces.forEach(function(p){
-    occ[p.y][p.x]=block;
+    p.x=pos.x+(p.x-base.x);
+    p.y=pos.y+(p.y-base.y);
   });
 }
 
 /* ===== MERGE ===== */
-function mergeBlocks(){
+function merge(){
   for(var i=0;i<blocks.length;i++){
     for(var j=0;j<blocks.length;j++){
       if(i===j) continue;
-      var A=blocks[i], B=blocks[j];
-      if(canMerge(A,B)){
-        A.pieces=A.pieces.concat(B.pieces);
+      if(canMerge(blocks[i],blocks[j])){
+        blocks[i].pieces=blocks[i].pieces.concat(blocks[j].pieces);
         blocks.splice(j,1);
-        return mergeBlocks();
+        return merge();
       }
     }
   }
@@ -251,16 +246,16 @@ function canMerge(A,B){
   for(var i=0;i<A.pieces.length;i++){
     for(var j=0;j<B.pieces.length;j++){
       var a=A.pieces[i], b=B.pieces[j];
-      var right=a.cx+1===b.cx && a.x+1===b.x && a.y===b.y;
-      var down =a.cy+1===b.cy && a.y+1===b.y && a.x===b.x;
-      if(right||down) return true;
+      var r=a.cx+1===b.cx && a.x+1===b.x && a.y===b.y;
+      var d=a.cy+1===b.cy && a.y+1===b.y && a.x===b.x;
+      if(r||d) return true;
     }
   }
   return false;
 }
 
 /* ===== DRAW ===== */
-function drawAll(){
+function draw(){
   blocks.forEach(function(b){
     b.pieces.forEach(function(p){
       p.el.style.left=(p.x*PW)+"px";
