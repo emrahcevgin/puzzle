@@ -2,99 +2,81 @@
 <html>
 <head>
 <meta charset="UTF-8">
-
 <meta name="viewport"
 content="width=device-width,
 initial-scale=1,
 maximum-scale=1,
 user-scalable=no,
 viewport-fit=cover">
-
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="City Duel">
-
 <title>City Duel</title>
 
 <style>
 html,body{
-    margin:0;
-    padding:0;
-    background:#000814;
-    overflow:hidden;
-    font-family:Verdana,sans-serif;
+margin:0;
+padding:0;
+background:#000814;
+overflow:hidden;
+font-family:Verdana,sans-serif;
 }
 
-/* ROTATE MESSAGE */
-#rotateMessage{
-    position:fixed;
-    inset:0;
-    background:#000814;
-    color:white;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    text-align:center;
-    font-size:22px;
-    z-index:1000;
+#rotate{
+position:fixed;
+inset:0;
+background:#000814;
+color:white;
+display:flex;
+justify-content:center;
+align-items:center;
+text-align:center;
+font-size:22px;
+z-index:1000;
 }
 
-/* GAME AREA */
 #gameWrapper{
-    position:absolute;
-    inset:0;
-    display:flex;
-    justify-content:center;
-    align-items:center;
+position:absolute;
+inset:0;
+display:flex;
+justify-content:center;
+align-items:center;
 }
 
 canvas{
-    background:#001d3d;
-    image-rendering:pixelated;
+background:#001d3d;
 }
 
-/* HUD */
 #topUI{
-    position:absolute;
-    top:5px;
-    width:100%;
-    text-align:center;
-    pointer-events:none;
-    color:white;
+position:absolute;
+top:5px;
+width:100%;
+text-align:center;
+color:white;
+font-size:16px;
 }
 
-.hud{
-    position:absolute;
-    top:5px;
-    font-weight:bold;
-    font-size:16px;
-}
-
-#p1hud{ left:10px; color:lime; }
-#p2hud{ right:10px; color:red; }
+#p1{position:absolute;left:10px;color:lime;}
+#p2{position:absolute;right:10px;color:red;}
 
 #controls{
-    position:absolute;
-    bottom:5px;
-    width:100%;
-    text-align:center;
-    color:white;
+position:absolute;
+bottom:5px;
+width:100%;
+text-align:center;
+color:white;
 }
 
-input[type=range]{ width:140px; }
-button{ padding:6px 12px; }
+input[type=range]{width:140px;}
 </style>
 </head>
 <body>
 
-<div id="rotateMessage">
-📱<br><br>Lütfen telefonu yatay çevir
-</div>
+<div id="rotate">📱<br>Lütfen telefonu yatay çevir</div>
 
 <div id="topUI">
-<div id="p1hud" class="hud"></div>
-<div id="p2hud" class="hud"></div>
-<div id="windDisplay"></div>
+<div id="p1"></div>
+<div id="p2"></div>
+<div id="wind"></div>
 </div>
 
 <div id="gameWrapper">
@@ -102,18 +84,17 @@ button{ padding:6px 12px; }
 </div>
 
 <div id="controls">
-Açı <span id="angleValue">45</span>
+Açı <span id="aVal">45</span>
 <input type="range" id="angle" min="0" max="90" value="45">
 &nbsp;
-Güç <span id="powerValue">50</span>
+Güç <span id="pVal">50</span>
 <input type="range" id="power" min="10" max="100" value="50">
 <button onclick="shoot()">ATEŞ</button>
 </div>
 
 <script>
-const baseWidth=1000;
-const baseHeight=500;
-
+const W=1000;
+const H=500;
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
 
@@ -121,156 +102,224 @@ let buildings=[],stars=[];
 let projectile=null;
 let gravity=0.35;
 let wind=0;
-let currentPlayer=1;
+let current=1;
 let hits={1:0,2:0};
 let maxHits=5;
-let player1,player2;
+let p1,p2;
 
-/* ROTATION CHECK */
-function checkOrientation(){
-    if(window.innerHeight>window.innerWidth){
-        rotateMessage.style.display="flex";
-    }else{
-        rotateMessage.style.display="none";
-    }
+/* Orientation */
+function check(){
+rotate.style.display=
+(window.innerHeight>window.innerWidth)?"flex":"none";
 }
-window.addEventListener("resize",checkOrientation);
-checkOrientation();
+window.addEventListener("resize",check);
+check();
 
-/* SCALE */
-function resizeCanvas(){
-    let scale=Math.min(window.innerWidth/baseWidth,
-                       window.innerHeight/baseHeight);
-    canvas.width=baseWidth;
-    canvas.height=baseHeight;
-    canvas.style.width=(baseWidth*scale)+"px";
-    canvas.style.height=(baseHeight*scale)+"px";
+/* Scale */
+function resize(){
+let scale=Math.min(window.innerWidth/W,
+window.innerHeight/H);
+canvas.width=W;
+canvas.height=H;
+canvas.style.width=(W*scale)+"px";
+canvas.style.height=(H*scale)+"px";
 }
-window.addEventListener("resize",resizeCanvas);
-resizeCanvas();
+window.addEventListener("resize",resize);
+resize();
 
-/* SLIDERS */
-angle.oninput=()=>angleValue.innerText=angle.value;
-power.oninput=()=>powerValue.innerText=power.value;
+/* Sliders */
+angle.oninput=()=>aVal.innerText=angle.value;
+power.oninput=()=>pVal.innerText=power.value;
 
-/* STARS */
-function generateStars(){
-    stars=[];
-    for(let i=0;i<120;i++){
-        stars.push({
-            x:Math.random()*baseWidth,
-            y:Math.random()*baseHeight,
-            size:Math.random()*2
-        });
-    }
+/* Stars */
+function genStars(){
+stars=[];
+for(let i=0;i<100;i++){
+stars.push({x:Math.random()*W,
+y:Math.random()*H,
+s:Math.random()*2});
+}
 }
 function drawStars(){
-    ctx.fillStyle="white";
-    for(let s of stars){
-        ctx.fillRect(s.x,s.y,s.size,s.size);
-    }
+ctx.fillStyle="white";
+for(let s of stars){
+ctx.fillRect(s.x,s.y,s.s,s.s);
+}
 }
 
-/* CITY */
-function generateCity(){
-    buildings=[];
-    let x=0;
-    while(x<baseWidth){
-        let width=80+Math.random()*40;
-        let height=200+Math.random()*150;
-        if(x+width>baseWidth) width=baseWidth-x;
-        buildings.push({x,width,height});
-        x+=width;
-    }
-    player1={x:buildings[0].x+buildings[0].width/2,
-             y:baseHeight-buildings[0].height,
-             color:"lime"};
-    player2={x:buildings[buildings.length-1].x+
-             buildings[buildings.length-1].width/2,
-             y:baseHeight-buildings[buildings.length-1].height,
-             color:"red"};
+/* City with windows */
+function genCity(){
+buildings=[];
+let x=0;
+
+while(x<W){
+let width=80+Math.random()*40;
+let height=200+Math.random()*150;
+if(x+width>W) width=W-x;
+
+let floorH=30;
+let floors=Math.floor(height/floorH);
+let windows=[];
+
+for(let f=0;f<floors;f++){
+let row=[];
+for(let i=0;i<3;i++){
+row.push(Math.random()>0.5);
+}
+windows.push(row);
 }
 
+buildings.push({x,width,height,floorH,floors,windows});
+x+=width;
+}
+
+p1={b:buildings[0],color:"lime"};
+p2={b:buildings[buildings.length-1],color:"red"};
+}
+
+/* Damage */
+function damage(b){
+b.height-=40;
+if(b.height<20)b.height=20;
+
+let newFloors=Math.floor(b.height/b.floorH);
+while(b.floors>newFloors){
+b.windows.pop();
+b.floors--;
+}
+}
+
+/* Draw City */
 function drawCity(){
-    ctx.fillStyle="#444";
-    for(let b of buildings){
-        ctx.fillRect(b.x,baseHeight-b.height,b.width,b.height);
-    }
+for(let b of buildings){
+
+ctx.fillStyle="#444";
+ctx.fillRect(b.x,H-b.height,b.width,b.height);
+
+let w=12,h=15;
+let gap=(b.width-3*w)/4;
+
+for(let f=0;f<b.floors;f++){
+let y=H-b.floorH*(f+1);
+
+for(let i=0;i<3;i++){
+let x=b.x+gap+(gap+w)*i;
+ctx.fillStyle=b.windows[f][i]?"yellow":"black";
+ctx.fillRect(x,y+5,w,h);
+}
+}
+}
 }
 
+/* Players */
 function drawPlayer(p,label){
-    ctx.fillStyle=p.color;
-    ctx.beginPath();
-    ctx.arc(p.x,p.y-20,10,0,Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle="white";
-    ctx.fillText(label,p.x,p.y-35);
+let x=p.b.x+p.b.width/2;
+let y=H-p.b.height;
+
+ctx.fillStyle=p.color;
+ctx.beginPath();
+ctx.arc(x,y-20,10,0,Math.PI*2);
+ctx.fill();
+
+ctx.fillStyle="white";
+ctx.fillText(label,x,y-35);
 }
 
+/* Collision */
+function collision(){
+if(projectile.y>H||
+projectile.x<0||
+projectile.x>W)return true;
+
+for(let b of buildings){
+if(projectile.x>b.x&&
+projectile.x<b.x+b.width&&
+projectile.y>H-b.height){
+damage(b);
+return true;
+}
+}
+
+let target=current===1?p2:p1;
+let bx=target.b.x+target.b.width/2;
+let by=H-target.b.height;
+
+if(Math.abs(projectile.x-bx)<15&&
+projectile.y>by-35&&
+projectile.y<by){
+if(current===1)hits[2]++;
+else hits[1]++;
+return true;
+}
+
+return false;
+}
+
+/* HUD */
 function updateHUD(){
-    p1hud.innerText="P1 ❤️ "+(maxHits-hits[1]);
-    p2hud.innerText="P2 ❤️ "+(maxHits-hits[2]);
+p1.innerText="P1 ❤️ "+(maxHits-hits[1]);
+p2.innerText="P2 ❤️ "+(maxHits-hits[2]);
 }
 
-/* WIND */
+/* Wind */
 function newWind(){
-    wind=Math.random()*0.6-0.3;
-    windDisplay.innerText="Rüzgar: "+wind.toFixed(2);
+wind=Math.random()*0.6-0.3;
+wind.innerText="Rüzgar: "+wind.toFixed(2);
 }
 
-/* SHOOT */
+/* Shoot */
 function shoot(){
-    if(projectile) return;
+if(projectile)return;
 
-    let angleRad=angle.value*Math.PI/180;
-    let speed=power.value/5;
+let rad=angle.value*Math.PI/180;
+let speed=power.value/5;
 
-    let shooter=currentPlayer===1?player1:player2;
-    let dir=currentPlayer===1?1:-1;
+let shooter=current===1?p1:p2;
+let dir=current===1?1:-1;
+let x=shooter.b.x+shooter.b.width/2;
+let y=H-shooter.b.height-20;
 
-    projectile={
-        x:shooter.x,
-        y:shooter.y-20,
-        vx:Math.cos(angleRad)*speed*dir,
-        vy:-Math.sin(angleRad)*speed
-    };
+projectile={
+x,y,
+vx:Math.cos(rad)*speed*dir,
+vy:-Math.sin(rad)*speed
+};
 }
 
-/* LOOP */
-function update(){
-    ctx.clearRect(0,0,baseWidth,baseHeight);
+/* Loop */
+function loop(){
+ctx.clearRect(0,0,W,H);
 
-    drawStars();
-    drawCity();
-    drawPlayer(player1,"P1");
-    drawPlayer(player2,"P2");
+drawStars();
+drawCity();
+drawPlayer(p1,"P1");
+drawPlayer(p2,"P2");
 
-    if(projectile){
-        projectile.vy+=gravity;
-        projectile.vx+=wind;
-        projectile.x+=projectile.vx;
-        projectile.y+=projectile.vy;
+if(projectile){
+projectile.vy+=gravity;
+projectile.vx+=wind;
+projectile.x+=projectile.vx;
+projectile.y+=projectile.vy;
 
-        ctx.fillStyle="yellow";
-        ctx.beginPath();
-        ctx.arc(projectile.x,projectile.y,5,0,Math.PI*2);
-        ctx.fill();
+ctx.fillStyle="yellow";
+ctx.beginPath();
+ctx.arc(projectile.x,projectile.y,5,0,Math.PI*2);
+ctx.fill();
 
-        if(projectile.y>baseHeight){
-            projectile=null;
-            currentPlayer=currentPlayer===1?2:1;
-            newWind();
-        }
-    }
-
-    requestAnimationFrame(update);
-}
-
-generateStars();
-generateCity();
-newWind();
+if(collision()){
+projectile=null;
+current=current===1?2:1;
 updateHUD();
-update();
+}
+}
+
+requestAnimationFrame(loop);
+}
+
+genStars();
+genCity();
+updateHUD();
+loop();
 </script>
 
 </body>
