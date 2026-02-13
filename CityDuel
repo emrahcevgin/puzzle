@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>City Duel Final</title>
+<style>
+body{
+    margin:0;
+    background:#000814;
+    color:white;
+    text-align:center;
+    font-family:Verdana, sans-serif;
+}
+h1{margin:10px 0 5px 0;}
+#windDisplay{font-size:18px;margin-bottom:5px;}
+canvas{
+    background:#001d3d;
+    display:block;
+    margin:auto;
+}
+.controls{margin:15px;}
+input[type=range]{width:200px;}
+button{padding:6px 14px;font-size:14px;cursor:pointer;}
+.hud{
+    position:absolute;
+    top:10px;
+    font-weight:bold;
+    font-size:18px;
+}
+#p1hud{left:20px;color:lime;}
+#p2hud{right:20px;color:red;}
+</style>
+</head>
+<body>
+
+<h1>🌃 City Duel</h1>
+<div id="windDisplay"></div>
+
+<div id="p1hud" class="hud"></div>
+<div id="p2hud" class="hud"></div>
+
+<canvas id="game" width="1000" height="500"></canvas>
+
+<div class="controls">
+Açı: <span id="angleValue">45</span>°
+<br>
+<input type="range" id="angle" min="0" max="90" value="45">
+<br><br>
+Güç: <span id="powerValue">50</span>
+<br>
+<input type="range" id="power" min="10" max="100" value="50">
+<br><br>
+<button onclick="shoot()">ATEŞ ET</button>
+</div>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+let buildings=[],stars=[],particles=[];
+let projectile=null;
+let lastTrajectories={1:[],2:[]};
+
+let gravity=0.35,wind=0,currentPlayer=1,maxHits=5;
+let hits={1:0,2:0};
+let player1,player2;
+let arrowTime=0;
+
+/* SLIDERS */
+const angleSlider=document.getElementById("angle");
+const powerSlider=document.getElementById("power");
+angleSlider.oninput=()=>document.getElementById("angleValue").innerText=angleSlider.value;
+powerSlider.oninput=()=>document.getElementById("powerValue").innerText=powerSlider.value;
+
+/* STARS */
+function generateStars(){
+    stars=[];
+    for(let i=0;i<120;i++){
+        stars.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,size:Math.random()*2});
+    }
+}
+function drawStars(){
+    ctx.fillStyle="white";
+    for(let s of stars) ctx.fillRect(s.x,s.y,s.size,s.size);
+}
+
+/* CITY + WINDOWS */
+function generateCity(){
+    buildings=[];
+    let x=0;
+
+    while(x<canvas.width){
+        let width=70+Math.random()*40;
+        let height=180+Math.random()*200;
+        if(x+width>canvas.width) width=canvas.width-x;
+
+        let floorHeight=25;
+        let floors=Math.floor(height/floorHeight);
+
+        let windows=[];
+        for(let f=0;f<floors;f++){
+            let row=[];
+            for(let i=0;i<3;i++){
+                row.push(Math.random()>0.5);
+            }
+            windows.push(row);
+        }
+
+        buildings.push({x,width,height,floorHeight,floors,windows});
+        x+=width;
+    }
+
+    player1={building:buildings[0],color:"lime"};
+    player2={building:buildings[buildings.length-1],color:"red"};
+}
+
+/* DAMAGE BUILDING (KATLAR SİLİNİR) */
+function damageBuilding(b){
+    b.height-=30;
+    if(b.height<20) b.height=20;
+
+    let newFloors=Math.floor(b.height/b.floorHeight);
+
+    while(b.floors>newFloors){
+        b.windows.pop();
+        b.floors--;
+    }
+}
+
+/* DRAW CITY */
+function drawCity(){
+    for(let b of buildings){
+
+        ctx.fillStyle="#3a3a3a";
+        ctx.fillRect(b.x,canvas.height-b.height,b.width,b.height);
+
+        let w=12,h=15;
+        let gapX=(b.width-3*w)/4;
+
+        for(let f=0;f<b.floors;f++){
+            let y=canvas.height-b.floorHeight*(f+1);
+
+            for(let i=0;i<3;i++){
+                let x=b.x+gapX+(gapX+w)*i;
+                ctx.fillStyle=b.windows[f][i]?"yellow":"black";
+                ctx.fillRect(x,y+5,w,h);
+            }
+        }
+    }
+}
+
+/* PLAYERS */
+function drawPlayer(player,label){
+    let b=player.building;
+    let x=b.x+b.width/2;
+    let y=canvas.height-b.height;
+
+    ctx.fillStyle=player.color;
+    ctx.beginPath();
+    ctx.arc(x,y-15,10,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(x,y-30,6,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle="white";
+    ctx.font="bold 14px Arial";
+    ctx.textAlign="center";
+    ctx.fillText(label,x,y-45);
+
+    if((currentPlayer===1&&player===player1)||(currentPlayer===2&&player===player2)){
+        drawArrow(x,y-60,player.color);
+    }
+}
+
+function drawArrow(x,y,color){
+    let offset=Math.sin(arrowTime)*5;
+    ctx.fillStyle=color;
+    ctx.beginPath();
+    ctx.moveTo(x,y+offset);
+    ctx.lineTo(x-8,y-10+offset);
+    ctx.lineTo(x+8,y-10+offset);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawPlayers(){
+    drawPlayer(player1,"P1");
+    drawPlayer(player2,"P2");
+}
+
+/* TRAJECTORY */
+function drawTrajectory(points,color){
+    if(points.length<2) return;
+    ctx.setLineDash([5,5]);
+    ctx.strokeStyle=color;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x,points[0].y);
+    for(let p of points) ctx.lineTo(p.x,p.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+/* EXPLOSION */
+function createExplosion(x,y){
+    for(let i=0;i<25;i++){
+        particles.push({x,y,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.5)*6,life:30});
+    }
+}
+function updateParticles(){
+    for(let p of particles){
+        p.x+=p.vx;
+        p.y+=p.vy;
+        p.life--;
+    }
+    particles=particles.filter(p=>p.life>0);
+    ctx.fillStyle="orange";
+    for(let p of particles) ctx.fillRect(p.x,p.y,3,3);
+}
+
+/* HUD */
+function updateHUD(){
+    document.getElementById("p1hud").innerText=`PLAYER 1 ❤️ ${maxHits-hits[1]}`;
+    document.getElementById("p2hud").innerText=`PLAYER 2 ❤️ ${maxHits-hits[2]}`;
+}
+
+/* WIND */
+function newWind(){
+    wind=Math.random()*0.6-0.3;
+    let symbol="•",text="Sakin";
+    if(wind>0.05){symbol="➡";text="Sağa";}
+    else if(wind<-0.05){symbol="⬅";text="Sola";}
+    else wind=0;
+
+    document.getElementById("windDisplay").innerText=
+        `Rüzgar: ${Math.abs(wind).toFixed(2)} ${symbol} (${text})`;
+}
+
+/* SHOOT */
+function shoot(){
+    if(projectile) return;
+
+    let angle=parseFloat(angleSlider.value);
+    let power=parseFloat(powerSlider.value);
+    let rad=angle*Math.PI/180;
+    let speed=power/5;
+
+    let shooter=currentPlayer===1?player1:player2;
+    let dir=currentPlayer===1?1:-1;
+    let b=shooter.building;
+
+    projectile={
+        x:b.x+b.width/2,
+        y:canvas.height-b.height-35,
+        vx:Math.cos(rad)*speed*dir,
+        vy:-Math.sin(rad)*speed,
+        trail:[]
+    };
+}
+
+/* COLLISION */
+function checkCollision(){
+
+    if(projectile.y>canvas.height ||
+       projectile.x<0 ||
+       projectile.x>canvas.width) return true;
+
+    for(let b of buildings){
+        if(projectile.x>b.x &&
+           projectile.x<b.x+b.width &&
+           projectile.y>canvas.height-b.height){
+
+            damageBuilding(b);
+            createExplosion(projectile.x,projectile.y);
+            return true;
+        }
+    }
+
+    let target=currentPlayer===1?player2:player1;
+    let b=target.building;
+    let px=b.x+b.width/2;
+    let py=canvas.height-b.height;
+
+    if(Math.abs(projectile.x-px)<15 &&
+       projectile.y>py-35 &&
+       projectile.y<py){
+
+        if(target===player1) hits[1]++;
+        else hits[2]++;
+
+        createExplosion(projectile.x,projectile.y);
+        return true;
+    }
+
+    return false;
+}
+
+/* TURN */
+function endTurn(){
+    lastTrajectories[currentPlayer]=projectile.trail;
+    projectile=null;
+
+    if(hits[1]>=maxHits){alert("PLAYER 2 WINS!");resetGame();return;}
+    if(hits[2]>=maxHits){alert("PLAYER 1 WINS!");resetGame();return;}
+
+    currentPlayer=currentPlayer===1?2:1;
+    newWind();
+    updateHUD();
+}
+
+function resetGame(){
+    hits={1:0,2:0};
+    currentPlayer=1;
+    generateCity();
+    newWind();
+    updateHUD();
+}
+
+/* LOOP */
+function update(){
+    arrowTime+=0.1;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    drawStars();
+    drawCity();
+    drawTrajectory(lastTrajectories[1],"lime");
+    drawTrajectory(lastTrajectories[2],"red");
+    drawPlayers();
+
+    if(projectile){
+        projectile.vy+=gravity;
+        projectile.vx+=wind;
+        projectile.x+=projectile.vx;
+        projectile.y+=projectile.vy;
+        projectile.trail.push({x:projectile.x,y:projectile.y});
+
+        ctx.fillStyle="yellow";
+        ctx.beginPath();
+        ctx.arc(projectile.x,projectile.y,5,0,Math.PI*2);
+        ctx.fill();
+
+        if(checkCollision()) endTurn();
+    }
+
+    updateParticles();
+    requestAnimationFrame(update);
+}
+
+generateStars();
+generateCity();
+newWind();
+updateHUD();
+update();
+</script>
+
+</body>
+</html>
