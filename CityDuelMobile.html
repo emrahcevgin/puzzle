@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+
+<!-- iOS Fullscreen Ayarları -->
+<meta name="viewport"
+      content="width=device-width,
+               initial-scale=1,
+               maximum-scale=1,
+               user-scalable=no,
+               viewport-fit=cover">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="City Duel">
+
+<title>City Duel Mobile</title>
+
+<style>
+html,body{
+    margin:0;
+    padding:0;
+    background:#000814;
+    overflow:hidden;
+    font-family:Verdana, sans-serif;
+}
+
+/* ROTATE UYARI */
+#rotateMessage{
+    position:fixed;
+    inset:0;
+    background:#000814;
+    color:white;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    text-align:center;
+    font-size:22px;
+    z-index:999;
+}
+
+/* Oyun Container */
+#gameContainer{
+    position:absolute;
+    inset:0;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+
+canvas{
+    background:#001d3d;
+}
+
+/* HUD */
+#topUI{
+    position:absolute;
+    top:10px;
+    width:100%;
+    text-align:center;
+    pointer-events:none;
+    color:white;
+    font-size:18px;
+}
+
+.hud{
+    position:absolute;
+    top:10px;
+    font-weight:bold;
+}
+
+#p1hud{ left:15px; color:lime; }
+#p2hud{ right:15px; color:red; }
+
+/* Controls */
+#controls{
+    position:absolute;
+    bottom:10px;
+    width:100%;
+    text-align:center;
+    color:white;
+}
+
+input[type=range]{ width:160px; }
+button{ padding:6px 14px; font-size:14px; }
+</style>
+</head>
+<body>
+
+<div id="rotateMessage">
+📱<br><br>
+Lütfen telefonu yatay çevir
+</div>
+
+<div id="topUI">
+    <div id="p1hud" class="hud"></div>
+    <div id="p2hud" class="hud"></div>
+    <div id="windDisplay"></div>
+</div>
+
+<div id="gameContainer">
+    <canvas id="game"></canvas>
+</div>
+
+<div id="controls">
+Açı: <span id="angleValue">45</span>
+<input type="range" id="angle" min="0" max="90" value="45">
+&nbsp;&nbsp;
+Güç: <span id="powerValue">50</span>
+<input type="range" id="power" min="10" max="100" value="50">
+<button onclick="shoot()">ATEŞ</button>
+</div>
+
+<script>
+const baseWidth=1000;
+const baseHeight=500;
+
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+/* -------- ORIENTATION CHECK -------- */
+function checkOrientation(){
+    if(window.innerHeight > window.innerWidth){
+        document.getElementById("rotateMessage").style.display="flex";
+    }else{
+        document.getElementById("rotateMessage").style.display="none";
+    }
+}
+
+window.addEventListener("resize",checkOrientation);
+checkOrientation();
+
+/* -------- RESPONSIVE SCALE -------- */
+function resizeCanvas(){
+    let scale=Math.min(window.innerWidth/baseWidth,
+                       window.innerHeight/baseHeight);
+
+    canvas.width=baseWidth;
+    canvas.height=baseHeight;
+
+    canvas.style.width=(baseWidth*scale)+"px";
+    canvas.style.height=(baseHeight*scale)+"px";
+}
+window.addEventListener("resize",resizeCanvas);
+resizeCanvas();
+
+/* -------- OYUN -------- */
+let buildings=[];
+let projectile=null;
+let gravity=0.35;
+let wind=0;
+let currentPlayer=1;
+
+const angleSlider=document.getElementById("angle");
+const powerSlider=document.getElementById("power");
+
+angleSlider.oninput=()=>document.getElementById("angleValue").innerText=angleSlider.value;
+powerSlider.oninput=()=>document.getElementById("powerValue").innerText=powerSlider.value;
+
+function generateCity(){
+    buildings=[];
+    let x=0;
+    while(x<baseWidth){
+        let width=70+Math.random()*40;
+        let height=200+Math.random()*150;
+        if(x+width>baseWidth) width=baseWidth-x;
+        buildings.push({x,width,height});
+        x+=width;
+    }
+}
+
+function drawCity(){
+    ctx.fillStyle="#3a3a3a";
+    for(let b of buildings){
+        ctx.fillRect(b.x,baseHeight-b.height,b.width,b.height);
+    }
+}
+
+function newWind(){
+    wind=Math.random()*0.6-0.3;
+    document.getElementById("windDisplay").innerText=
+        "Rüzgar: "+wind.toFixed(2);
+}
+
+function shoot(){
+    if(projectile) return;
+
+    let angle=parseFloat(angleSlider.value);
+    let power=parseFloat(powerSlider.value);
+    let rad=angle*Math.PI/180;
+
+    let dir=currentPlayer===1?1:-1;
+
+    projectile={
+        x:currentPlayer===1?50:baseWidth-50,
+        y:300,
+        vx:Math.cos(rad)*(power/5)*dir,
+        vy:-Math.sin(rad)*(power/5)
+    };
+}
+
+function update(){
+    ctx.clearRect(0,0,baseWidth,baseHeight);
+    drawCity();
+
+    if(projectile){
+        projectile.vy+=gravity;
+        projectile.vx+=wind;
+        projectile.x+=projectile.vx;
+        projectile.y+=projectile.vy;
+
+        ctx.fillStyle="yellow";
+        ctx.beginPath();
+        ctx.arc(projectile.x,projectile.y,5,0,Math.PI*2);
+        ctx.fill();
+
+        if(projectile.y>baseHeight){
+            projectile=null;
+            currentPlayer=currentPlayer===1?2:1;
+            newWind();
+        }
+    }
+
+    requestAnimationFrame(update);
+}
+
+generateCity();
+newWind();
+update();
+</script>
+
+</body>
+</html>
